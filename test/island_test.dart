@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ui' show Size;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -100,6 +101,23 @@ void main() {
     expect(decision['behavior'], 'allow');
     expect(decision['updatedInput']['answers']['Quel moteur ?'], 'Algolia');
     c.dispose();
+  });
+
+  test('une conversation se sauvegarde et se relit', () async {
+    final state = AppState(Settings());
+    expect(state.conversation.isEmpty, isTrue);
+    state.addChat(ChatMessage('user', 'Ouvre   Chrome et va sur youtube'));
+    state.addChat(ChatMessage('assistant', 'Voilà.'));
+    expect(state.conversation.title, 'Ouvre Chrome et va sur youtube');
+    final json = jsonDecode(jsonEncode(state.conversation.toJson()));
+    final back = Conversation.fromJson(json)!;
+    expect(back.id, state.conversation.id);
+    expect(back.messages.length, 2);
+    expect(back.messages.first.role, 'user');
+    expect(back.title, state.conversation.title);
+    await state.newConversation();
+    expect(state.conversation.isEmpty, isTrue);
+    expect(state.conversation.id, isNot(back.id));
   });
 }
 

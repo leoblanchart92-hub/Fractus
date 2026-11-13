@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'layout.dart';
 import 'models.dart';
 import 'settings.dart';
+import '../services/conversation_store.dart';
 
 class AppState extends ChangeNotifier {
   AppState(this.settings);
@@ -29,8 +30,13 @@ class AppState extends ChangeNotifier {
   /// Le plus de demandes en attente d'un coup, carte comprise (ApprovalQueue.maxPending).
   static const int maxPending = 5;
 
-  final List<ChatMessage> chat = [];
+  /// La conversation ouverte dans le chat (persistée par [conversations]).
+  Conversation conversation = Conversation();
+  List<ChatMessage> get chat => conversation.messages;
   bool chatBusy = false;
+
+  /// Qui garde les conversations sur disque (posé par main) ; null dans les tests.
+  ConversationStore? conversations;
 
   /// Nombre de « points » que la bande d'en-tête annonce : « N en cours ».
   int get runningCount => sessions.values.where((s) => s.isActive).length;
@@ -156,8 +162,40 @@ class AppState extends ChangeNotifier {
   // ── Chat ──────────────────────────────────────────────────────────────────
 
   void addChat(ChatMessage m) {
-    chat.add(m);
-    if (chat.length > 60) chat.removeAt(0);
+    conversation.add(m);
+    conversations?.saveSoon(conversation);
+    notifyListeners();
+  }
+
+  /// À appeler quand un message existant a changé (fin du streaming).
+  void saveChatSoon() {
+    conversation.updated = DateTime.now();
+    conversations?.saveSoon(conversation);
+    notifyListeners();
+  }
+
+  /// Repart sur une conversation vide (l'ancienne reste dans l'historique).
+  Future<void> newConversation() async {
+    if (chatBusy) return;
+    await conversations?.flush();
+    if (conversation.isEmpty) return;
+    conversation = Conversation();
+    notifyListeners();
+  }
+
+  /// Rouvre une conversation de l'historique.
+  Future<void> openConversation(String id) async {
+    if (chatBusy || id == conversation.id) return;
+    await conversations?.flush();
+    final c = await conversations?.load(id);
+    if (c == null) return;
+    conversation = c;
+    notifyListeners();
+  }
+
+  Future<void> deleteConversation(String id) async {
+    await conversations?.delete(id);
+    if (id == conversation.id) conversation = Conversation();
     notifyListeners();
   }
 

@@ -88,7 +88,91 @@ class ApprovalInfo {
 }
 
 class ChatMessage {
-  ChatMessage(this.role, this.text);
+  ChatMessage(this.role, this.text, {DateTime? at}) : at = at ?? DateTime.now();
   final String role; // "user" | "assistant" | "system"
   String text;
+  final DateTime at;
+
+  Map<String, dynamic> toJson() => {'role': role, 'text': text, 'at': at.toIso8601String()};
+
+  static ChatMessage? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final role = j['role'];
+    final text = j['text'];
+    if (role is! String || text is! String) return null;
+    return ChatMessage(role, text, at: DateTime.tryParse((j['at'] ?? '').toString()));
+  }
+}
+
+/// Une conversation du chat : ses messages, un titre (la première demande), ses dates.
+class Conversation {
+  Conversation({String? id, DateTime? created})
+      : id = id ?? DateTime.now().millisecondsSinceEpoch.toRadixString(36),
+        created = created ?? DateTime.now(),
+        updated = created ?? DateTime.now();
+
+  final String id;
+  final DateTime created;
+  DateTime updated;
+  String title = '';
+  final List<ChatMessage> messages = [];
+
+  /// Les messages gardés en mémoire (le fichier garde les mêmes).
+  static const int maxMessages = 400;
+
+  bool get isEmpty => messages.isEmpty;
+
+  void add(ChatMessage m) {
+    messages.add(m);
+    if (messages.length > maxMessages) messages.removeAt(0);
+    if (title.isEmpty && m.role == 'user') title = titleFrom(m.text);
+    updated = DateTime.now();
+  }
+
+  static String titleFrom(String text) {
+    final one = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return one.length <= 48 ? one : '${one.substring(0, 47)}…';
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'created': created.toIso8601String(),
+        'updated': updated.toIso8601String(),
+        'messages': messages.map((m) => m.toJson()).toList(),
+      };
+
+  static Conversation? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final id = j['id'];
+    if (id is! String || id.isEmpty) return null;
+    final c = Conversation(id: id, created: DateTime.tryParse((j['created'] ?? '').toString()));
+    c.updated = DateTime.tryParse((j['updated'] ?? '').toString()) ?? c.created;
+    c.title = (j['title'] ?? '').toString();
+    final msgs = j['messages'];
+    if (msgs is List) {
+      for (final m in msgs) {
+        final cm = ChatMessage.fromJson(m);
+        if (cm != null) c.messages.add(cm);
+      }
+    }
+    if (c.title.isEmpty) {
+      for (final m in c.messages) {
+        if (m.role == 'user') {
+          c.title = titleFrom(m.text);
+          break;
+        }
+      }
+    }
+    return c;
+  }
+}
+
+/// Ce qu'on sait d'une conversation sans l'ouvrir (pour la liste).
+class ConversationMeta {
+  const ConversationMeta({required this.id, required this.title, required this.updated, required this.count});
+  final String id;
+  final String title;
+  final DateTime updated;
+  final int count;
 }

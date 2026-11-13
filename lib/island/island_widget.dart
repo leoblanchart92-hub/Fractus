@@ -13,10 +13,13 @@ import '../core/state.dart';
 import '../core/theme.dart';
 import '../companion/companion_view.dart';
 import '../services/chat_service.dart';
+import '../services/journal.dart';
+import '../services/memory.dart';
 import '../services/update_service.dart';
 import 'controller.dart';
 import 'views/cards.dart';
 import 'views/chat.dart';
+import 'views/journal.dart';
 import 'views/overview.dart';
 import 'views/settings.dart';
 import 'views/update.dart';
@@ -34,6 +37,8 @@ class IslandWidget extends StatefulWidget {
     required this.onRestartHooks,
     required this.updates,
     required this.onStartupChanged,
+    required this.journal,
+    required this.memory,
   });
 
   final AppState state;
@@ -45,6 +50,8 @@ class IslandWidget extends StatefulWidget {
   final VoidCallback onRestartHooks;
   final UpdateService updates;
   final ValueChanged<bool> onStartupChanged;
+  final Journal journal;
+  final LongTermMemory memory;
 
   @override
   State<IslandWidget> createState() => _IslandWidgetState();
@@ -68,7 +75,7 @@ class _IslandWidgetState extends State<IslandWidget> {
     if (e is! KeyDownEvent) return KeyEventResult.ignored;
     final k = e.logicalKey;
     if (k == LogicalKeyboardKey.escape) {
-      if (state.view == IslandView.prompt || state.view == IslandView.settings) {
+      if (state.view == IslandView.prompt || state.view == IslandView.settings || state.view == IslandView.journal) {
         state.setView(state.defaultView());
       }
       c.close();
@@ -276,6 +283,14 @@ class _IslandWidgetState extends State<IslandWidget> {
             size: 15,
             onTap: () => state.setView(IslandView.prompt),
           ),
+          const SizedBox(width: 8),
+          HeaderTab(
+            icon: Icons.history_rounded,
+            on: view == IslandView.journal,
+            tooltip: 'Journal d\'activité (ce que Fractus a fait, Annuler)',
+            size: 15,
+            onTap: () => state.setView(view == IslandView.journal ? state.defaultView() : IslandView.journal),
+          ),
           const Spacer(),
           if (running > 0) ...[
             Text('$running en cours', style: ui(12, color: Palette.dim2)),
@@ -338,7 +353,10 @@ class _IslandWidgetState extends State<IslandWidget> {
           updates: widget.updates,
           onStartupChanged: widget.onStartupChanged,
           chat: widget.chat,
+          memory: widget.memory,
         );
+      case IslandView.journal:
+        return JournalView(journal: widget.journal);
       case IslandView.update:
         return UpdateView(
           updates: widget.updates,

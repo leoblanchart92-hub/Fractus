@@ -44,6 +44,11 @@ lui, s'appelle **Fractus** : un petit cristal aux grands yeux.
   `look_at_screen` envoie une capture (avec une grille de coordonnées) à un modèle vision de Groq qui lui
   dit ce qui est affiché et où, puis `click` / `scroll` / `drag` font le reste. Chaque action passe par la carte
   **Autoriser / Refuser / Toujours** de l'île ; son travail apparaît comme la session « Fractus ».
+- 🧠 **Il se souvient** (0.6) — les conversations sont gardées sur disque (historique et « Nouvelle
+  conversation » dans le chat, la dernière est rouverte au lancement) ; une **mémoire longue**
+  `memoire.md`, relue à chaque conversation, que Fractus enrichit lui-même (`remember` / `forget`, sous
+  permission) et que vous pouvez éditer à la main ; et un **journal d'activité** (onglet ⟲) qui liste
+  tout ce qu'il a fait, avec une copie de chaque fichier avant modification et un bouton **Annuler**.
 - 🌌 **Thème Aurora** — noir bleuté profond, surfaces teintées, accent cyan → violet en dégradé sur les
   boutons et en lueur diffuse derrière les cartes.
 - ⚙️ **Réglages dans l'île** — survol, son, lancement avec Windows, port des hooks, clé API, mises à jour, quitter.
@@ -91,9 +96,13 @@ Ce que l'agent peut faire pendant le chat :
 | `fetch_url` | carte |
 | `open`, `focus_window`, `window_action`, `send_keys`, `kill_process`, `clipboard_get`, `clipboard_set`, `screenshot`, `set_volume`, `power` | carte « Fractus veut agir sur ton PC », « Toujours » par type d'action |
 | `look_at_screen` (capture + modèle vision Llama 4 : description et coordonnées des éléments), `click`, `move_mouse`, `scroll`, `drag` | carte, « Toujours » par type d'action (`get_mouse_position` : libre) |
+| `remember`, `forget` (mémoire longue `memoire.md`) | carte « Retenir : … » / « Oublier : … » |
 
 Le dossier de travail se règle dans Réglages → Chat (vide = projet de l'agent en avant, sinon votre
 profil). Fractus n'approuve jamais une permission d'un autre agent : ça reste un clic humain.
+
+Tout vit dans `%APPDATA%\fractus\` : `settings.json`, `conversations\*.json` (les 60 dernières),
+`memoire.md`, `journal.json` et `backups\` (les copies d'avant, effacées avec le journal).
 
 ## Construire et lancer (Windows)
 

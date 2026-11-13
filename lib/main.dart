@@ -13,7 +13,10 @@ import 'island/controller.dart';
 import 'island/island_widget.dart';
 import 'services/chat_service.dart';
 import 'services/chat_tools.dart';
+import 'services/conversation_store.dart';
 import 'services/hook_server.dart';
+import 'services/journal.dart';
+import 'services/memory.dart';
 import 'services/startup_service.dart';
 import 'services/tray_service.dart';
 import 'services/update_service.dart';
@@ -28,13 +31,28 @@ Future<void> main() async {
   final settings = await Settings.load();
   final state = AppState(settings);
   final controller = IslandController(state);
+  // La mémoire : conversations, mémoire longue, journal d'activité.
+  final conversations = ConversationStore();
+  await conversations.refresh();
+  state.conversations = conversations;
+  final latest = await conversations.loadLatest();
+  // On reprend la dernière conversation si elle est récente (moins de 12 h).
+  if (latest != null && DateTime.now().difference(latest.updated) < const Duration(hours: 12)) {
+    state.conversation = latest;
+  }
+  final journal = Journal();
+  await journal.load();
+  final memory = LongTermMemory();
   final window = WindowService(state, controller);
   final hooks = HookServer(controller);
   final chat = ChatService(
     apiKey: settings.chatApiKey,
     model: settings.chatModel,
     webSearch: settings.chatWebSearch,
-    tools: ChatTools(state, controller: controller)..workspace = settings.chatWorkspace,
+    tools: ChatTools(state, controller: controller)
+      ..workspace = settings.chatWorkspace
+      ..journal = journal
+      ..memory = memory,
   );
   state.addListener(() {
     chat.apiKey = state.settings.chatApiKey;
@@ -46,6 +64,8 @@ Future<void> main() async {
   final updates = UpdateService(autoCheck: settings.autoUpdate);
 
   Future<void> quit() async {
+    await conversations.flush();
+    await journal.flush();
     await hooks.stop();
     await tray.stop();
     await window.quit();
@@ -65,6 +85,8 @@ Future<void> main() async {
   updates.onAvailable = (_) => controller.alert(IslandView.update);
   // Avant l'installateur : on coupe le serveur et l'icône, la fenêtre suit.
   updates.onBeforeInstall = () async {
+    await conversations.flush();
+    await journal.flush();
     await hooks.stop();
     await tray.stop();
   };
@@ -78,6 +100,8 @@ Future<void> main() async {
     updates: updates,
     onQuit: quit,
     onStartupChanged: startup.apply,
+    journal: journal,
+    memory: memory,
   ));
 
   await window.show();
@@ -115,6 +139,8 @@ class FractusApp extends StatelessWidget {
     required this.updates,
     required this.onQuit,
     required this.onStartupChanged,
+    required this.journal,
+    required this.memory,
   });
 
   final AppState state;
@@ -125,6 +151,8 @@ class FractusApp extends StatelessWidget {
   final UpdateService updates;
   final Future<void> Function() onQuit;
   final ValueChanged<bool> onStartupChanged;
+  final Journal journal;
+  final LongTermMemory memory;
 
   @override
   Widget build(BuildContext context) {
@@ -158,6 +186,8 @@ class FractusApp extends StatelessWidget {
           },
           updates: updates,
           onStartupChanged: onStartupChanged,
+          journal: journal,
+          memory: memory,
         ),
       ),
     );

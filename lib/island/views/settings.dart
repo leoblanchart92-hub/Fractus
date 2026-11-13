@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../core/state.dart';
 import '../../core/theme.dart';
 import '../../services/chat_service.dart';
+import '../../services/memory.dart';
 import '../../services/update_service.dart';
 import '../controller.dart';
 import '../widgets.dart';
@@ -22,6 +23,7 @@ class SettingsView extends StatefulWidget {
     required this.updates,
     required this.onStartupChanged,
     required this.chat,
+    required this.memory,
   });
   final AppState state;
   final IslandController controller;
@@ -32,6 +34,7 @@ class SettingsView extends StatefulWidget {
   final UpdateService updates;
   final ValueChanged<bool> onStartupChanged;
   final ChatService chat;
+  final LongTermMemory memory;
 
   @override
   State<SettingsView> createState() => _SettingsViewState();
@@ -47,6 +50,19 @@ class _SettingsViewState extends State<SettingsView> {
   bool _testOk = false;
   late final TextEditingController _port = TextEditingController(text: widget.state.settings.hookPort.toString());
   bool _copied = false;
+  int? _memoryCount;
+  bool _confirmForget = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshMemory();
+  }
+
+  Future<void> _refreshMemory() async {
+    final n = await widget.memory.count();
+    if (mounted) setState(() => _memoryCount = n);
+  }
 
   @override
   void dispose() {
@@ -197,6 +213,53 @@ class _SettingsViewState extends State<SettingsView> {
               'Fractus agit comme Claude Code : il lit, cherche, écrit, modifie et lance des commandes dans le dossier de travail — '
               'chaque action passe par la carte Autoriser / Refuser / Toujours. La clé reste sur cette machine.',
               style: ui(11, color: Palette.dim3),
+            ),
+            _section('Mémoire et historique'),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _memoryCount == null
+                        ? 'Mémoire longue (memoire.md)'
+                        : 'Mémoire longue : ${_memoryCount == 0 ? 'vide' : '$_memoryCount fait(s)'} — relue à chaque conversation',
+                    style: ui(12, color: Palette.dim),
+                  ),
+                ),
+                IslandButton(
+                  label: 'Ouvrir',
+                  compact: true,
+                  onTap: () async {
+                    await widget.memory.openInEditor();
+                  },
+                ),
+                const SizedBox(width: 6),
+                IslandButton(
+                  label: _confirmForget ? 'Confirmer' : 'Tout oublier',
+                  compact: true,
+                  onTap: () async {
+                    if (!_confirmForget) {
+                      setState(() => _confirmForget = true);
+                      return;
+                    }
+                    await widget.memory.clear();
+                    _confirmForget = false;
+                    await _refreshMemory();
+                  },
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Conversations gardées : ${widget.state.conversations?.index.length ?? 0} (les 60 dernières) — '
+                    'historique et « Nouvelle conversation » dans le chat ; journal d\'activité et Annuler dans l\'onglet ⟲.',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: ui(11, color: Palette.dim3),
+                  ),
+                ),
+              ],
             ),
             _section('Mises à jour'),
             _toggle('Chercher les mises à jour automatiquement', s.autoUpdate, (v) {

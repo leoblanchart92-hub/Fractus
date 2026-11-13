@@ -15,6 +15,7 @@ enum IslandView {
   confused,
   prompt,
   settings,
+  journal,
   greeting,
   launch,
   update,
@@ -81,6 +82,7 @@ const Map<IslandView, ViewLayout> viewLayouts = {
   IslandView.confused: ViewLayout(height: 160, botX: 76, botDiameter: 66, agentMode: AgentLayoutMode.column),
   IslandView.prompt: ViewLayout(height: 160, botX: 52, botDiameter: 44, agentMode: AgentLayoutMode.column),
   IslandView.settings: ViewLayout(height: 160, botX: 54, botDiameter: 46, agentMode: AgentLayoutMode.none),
+  IslandView.journal: ViewLayout(height: 240, botX: 52, botDiameter: 44, agentMode: AgentLayoutMode.none),
   IslandView.greeting: ViewLayout(height: 150, botX: 320, botY: 90, botDiameter: 0, agentMode: AgentLayoutMode.none),
   IslandView.launch: ViewLayout(height: 160, botX: 58, botDiameter: 52, agentMode: AgentLayoutMode.none),
   IslandView.update: ViewLayout(height: 160, botX: 62, botDiameter: 58, agentMode: AgentLayoutMode.none),
@@ -90,7 +92,7 @@ const Map<IslandView, ViewLayout> viewLayouts = {
 const double questionPickerH = 200;
 
 /// La vue chat grandit avec la conversation (IslandContainer.chatPromptHeight).
-double chatPromptHeight(int messageCount) => (240 + messageCount * 40).clamp(240, 300).toDouble();
+double chatPromptHeight(int messageCount) => (260 + messageCount * 40).clamp(260, 300).toDouble();
 
 Size islandSize(IslandMode mode, IslandView view, {int chatCount = 0, bool questionPicker = false}) {
   switch (mode) {

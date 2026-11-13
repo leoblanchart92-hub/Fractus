@@ -17,6 +17,8 @@ import '../core/layout.dart';
 import '../core/models.dart';
 import '../core/state.dart';
 import '../island/controller.dart';
+import 'journal.dart';
+import 'memory.dart';
 import 'screen_tools.dart';
 
 class ChatTools {
@@ -29,6 +31,10 @@ class ChatTools {
 
   /// Les yeux : décrit une image JPEG (posé par ChatService, qui connaît Groq).
   Future<String> Function(List<int> jpeg, String prompt)? vision;
+
+  /// Le journal d'activité (copies d'avant + Annuler) et la mémoire longue.
+  Journal? journal;
+  LongTermMemory? memory;
 
   static const String sessionId = 'fractus';
   static const int maxCommandOutput = 30 * 1024;
@@ -140,6 +146,13 @@ class ChatTools {
           'action': {'type': 'string', 'enum': ['minimize', 'maximize', 'restore', 'close', 'move']},
           'x': {'type': 'integer'}, 'y': {'type': 'integer'}, 'width': {'type': 'integer'}, 'height': {'type': 'integer'},
         }, required: ['action']),
+        // ── La mémoire longue ──
+        _tool('remember', 'Ajoute un fait durable à ta mémoire longue (memoire.md), relue à chaque conversation : prénom, projets, chemins, préférences, façon de travailler. Une phrase courte et factuelle. Demande la permission.', {
+          'text': {'type': 'string', 'description': 'Le fait, en une phrase (ex. "Le projet principal est D:\\dev\\site (Next.js)").'},
+        }, required: ['text']),
+        _tool('forget', 'Retire de la mémoire longue les faits qui contiennent ce texte (périmés ou sur demande). Demande la permission.', {
+          'text': {'type': 'string', 'description': 'Un morceau du fait à retirer.'},
+        }, required: ['text']),
       ];
 
   Map<String, dynamic> _tool(String name, String description, Map<String, dynamic> props, {List<String> required = const []}) {
@@ -212,6 +225,10 @@ class ChatTools {
         return 'regarde la souris';
       case 'window_action':
         return '${args['action']} ${args['title'] ?? args['pid'] ?? ''}';
+      case 'remember':
+        return 'retient « ${_oneLine(args['text'])} »';
+      case 'forget':
+        return 'oublie « ${_oneLine(args['text'])} »';
       default:
         return name;
     }
@@ -293,6 +310,10 @@ class ChatTools {
           return await _ps(psMousePosition);
         case 'window_action':
           return await _windowAction(args);
+        case 'remember':
+          return await _remember(args);
+        case 'forget':
+          return await _forget(args);
         default:
           return jsonEncode({'error': 'Outil inconnu : $name'});
       }
@@ -442,8 +463,17 @@ class ChatTools {
     if (denied != null) return denied;
     final f = File(path);
     final existed = await f.exists();
+    final backup = existed ? await journal?.backupOf(path) : null;
     await f.parent.create(recursive: true);
     await f.writeAsString(content);
+    journal?.record(
+      kind: JournalKind.write,
+      label: '${existed ? 'Remplacé' : 'Créé'} ${_short(path)}',
+      detail: path,
+      path: path,
+      backup: backup,
+      created: !existed,
+    );
     return jsonEncode({'ok': true, 'path': path, 'created': !existed, 'bytes': utf8.encode(content).length});
   }
 
@@ -460,7 +490,9 @@ class ChatTools {
     if (count > 1) return jsonEncode({'error': 'old_text apparaît $count fois : donne plus de contexte pour qu\'il soit unique.'});
     final denied = await _permission('Edit', {'file_path': path, 'old_string': oldText, 'new_string': newText});
     if (denied != null) return denied;
+    final backup = await journal?.backupOf(path);
     await f.writeAsString(text.replaceFirst(oldText, newText));
+    journal?.record(kind: JournalKind.edit, label: 'Modifié ${_short(path)}', detail: path, path: path, backup: backup);
     return jsonEncode({'ok': true, 'path': path});
   }
 
@@ -471,6 +503,11 @@ class ChatTools {
     final denied = await _permission('Bash', {'command': command, if (args['description'] != null) 'description': args['description']});
     if (denied != null) return denied;
     final cwd = baseDir();
+    journal?.record(
+      kind: JournalKind.command,
+      label: 'Lancé ${_oneLine(command)}',
+      detail: args['description'] is String ? '${args['description']} — dans $cwd' : 'dans $cwd',
+    );
     final sw = Stopwatch()..start();
     final proc = await Process.start(
       'powershell.exe',
@@ -550,7 +587,49 @@ class ChatTools {
   Future<String> _gated(String tool, Map<String, dynamic> input, Future<String> Function() run) async {
     final denied = await _permission(tool, input);
     if (denied != null) return denied;
-    return run();
+    final out = await run();
+    if (tool == 'Fractus') {
+      final action = (input['action'] ?? tool).toString();
+      final target = input['target'] ?? input['keys'] ?? input['text'];
+      journal?.record(
+        kind: JournalKind.action,
+        label: target == null ? action : '$action : ${_oneLine(target.toString())}',
+        detail: out.startsWith('{"error"') ? 'échec : ${_oneLine(out)}' : null,
+      );
+    }
+    return out;
+  }
+
+  // ── La mémoire longue ─────────────────────────────────────────────────────
+
+  Future<String> _remember(Map<String, dynamic> args) async {
+    final mem = memory;
+    if (mem == null) return jsonEncode({'error': 'Mémoire indisponible.'});
+    final text = (args['text'] ?? '').toString().trim();
+    if (text.isEmpty) return jsonEncode({'error': 'Texte vide.'});
+    final denied = await _permission('Fractus', {'action': 'Retenir', 'target': text});
+    if (denied != null) return denied;
+    final path = await mem.path();
+    final backup = await journal?.backupOf(path);
+    final msg = await mem.remember(text);
+    journal?.record(kind: JournalKind.memory, label: 'Retenu : ${_oneLine(text)}', detail: path, path: path, backup: backup, created: backup == null);
+    return jsonEncode({'ok': true, 'result': msg, 'facts': await mem.count()});
+  }
+
+  Future<String> _forget(Map<String, dynamic> args) async {
+    final mem = memory;
+    if (mem == null) return jsonEncode({'error': 'Mémoire indisponible.'});
+    final text = (args['text'] ?? '').toString().trim();
+    if (text.isEmpty) return jsonEncode({'error': 'Texte vide.'});
+    final denied = await _permission('Fractus', {'action': 'Oublier', 'target': text});
+    if (denied != null) return denied;
+    final path = await mem.path();
+    final backup = await journal?.backupOf(path);
+    final n = await mem.forget(text);
+    if (n > 0) {
+      journal?.record(kind: JournalKind.memory, label: 'Oublié : ${_oneLine(text)}', detail: '$n fait(s) retiré(s)', path: path, backup: backup);
+    }
+    return jsonEncode({'ok': true, 'removed': n, 'facts': await mem.count()});
   }
 
   /// Chaîne PowerShell entre apostrophes simples.

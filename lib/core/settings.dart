@@ -66,10 +66,17 @@ class Settings {
     return s;
   }
 
-  static Future<File> _file() async {
-    final dir = await getApplicationSupportDirectory();
-    final d = Directory('${dir.path}${Platform.pathSeparator}fractus');
+  /// Le dossier de Fractus (%APPDATA%\\fractus) : réglages, conversations,
+  /// mémoire, journal et copies de sauvegarde.
+  static Future<Directory> dir() async {
+    final base = await getApplicationSupportDirectory();
+    final d = Directory('${base.path}${Platform.pathSeparator}fractus');
     if (!await d.exists()) await d.create(recursive: true);
+    return d;
+  }
+
+  static Future<File> _file() async {
+    final d = await dir();
     return File('${d.path}${Platform.pathSeparator}settings.json');
   }
 

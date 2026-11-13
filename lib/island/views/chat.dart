@@ -74,7 +74,7 @@ class _ChatViewState extends State<ChatView> {
       reply.text = 'Impossible de joindre Groq : $e';
     } finally {
       widget.state.chatBusy = false;
-      widget.state.touch();
+      widget.state.saveChatSoon();
       _scrollDown();
       _focus.requestFocus();
     }
@@ -93,6 +93,11 @@ class _ChatViewState extends State<ChatView> {
       padding: const EdgeInsets.only(left: 96, right: 12, bottom: 12),
       child: Column(
         children: [
+          _TopBar(state: widget.state, onChanged: () {
+            setState(() {});
+            _scrollDown();
+            _focus.requestFocus();
+          }),
           Expanded(
             child: msgs.isEmpty
                 ? Align(
@@ -101,7 +106,7 @@ class _ChatViewState extends State<ChatView> {
                       padding: const EdgeInsets.only(bottom: 8, left: 6),
                       child: Text(
                         widget.chat.configured
-                            ? 'Demande-moi n\'importe quoi : je vois tes sessions et je peux lire tes projets.'
+                            ? 'Demande-moi n\'importe quoi : je pilote ton PC, je code, et je retiens ce que tu me dis de retenir.'
                             : 'Ajoute ta clé Groq dans les réglages pour discuter.',
                         style: ui(12, color: Palette.dim3),
                       ),
@@ -123,6 +128,106 @@ class _ChatViewState extends State<ChatView> {
               _focus.unfocus();
               widget.controller.close();
             },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Au-dessus du fil : le titre de la conversation, l'historique, « nouvelle ».
+class _TopBar extends StatelessWidget {
+  const _TopBar({required this.state, required this.onChanged});
+  final AppState state;
+  final VoidCallback onChanged;
+
+  static String _when(DateTime d) {
+    final now = DateTime.now();
+    if (d.year == now.year && d.month == now.month && d.day == now.day) {
+      return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    }
+    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = state.conversation;
+    final store = state.conversations;
+    final history = (store?.index ?? const <ConversationMeta>[]).where((m) => m.id != c.id).take(12).toList();
+    return SizedBox(
+      height: 22,
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              c.title.isEmpty ? 'Nouvelle conversation' : c.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: ui(11, color: Palette.dim3),
+            ),
+          ),
+          if (store != null)
+            PopupMenuButton<String>(
+              tooltip: 'Conversations précédentes',
+              color: Palette.card,
+              padding: EdgeInsets.zero,
+              enabled: !state.chatBusy,
+              onSelected: (id) async {
+                if (id.startsWith('del:')) {
+                  await state.deleteConversation(id.substring(4));
+                } else {
+                  await state.openConversation(id);
+                }
+                onChanged();
+              },
+              itemBuilder: (_) => [
+                if (history.isEmpty)
+                  PopupMenuItem(enabled: false, height: 30, child: Text('Aucune autre conversation', style: ui(12, color: Palette.dim3))),
+                for (final m in history)
+                  PopupMenuItem(
+                    value: m.id,
+                    height: 32,
+                    child: Row(
+                      children: [
+                        SizedBox(width: 40, child: Text(_when(m.updated), style: ui(10.5, color: Palette.dim4))),
+                        Expanded(
+                          child: Text(m.title.isEmpty ? '(sans titre)' : m.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: ui(12)),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (!c.isEmpty) ...[
+                  const PopupMenuDivider(height: 6),
+                  PopupMenuItem(
+                    value: 'del:${c.id}',
+                    height: 30,
+                    child: Text('Supprimer cette conversation', style: ui(12, color: Palette.redText)),
+                  ),
+                ],
+              ],
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4),
+                child: Icon(Icons.history_rounded, size: 15, color: Palette.dim),
+              ),
+            ),
+          const SizedBox(width: 2),
+          Tooltip(
+            message: 'Nouvelle conversation',
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                onTap: state.chatBusy
+                    ? null
+                    : () async {
+                        await state.newConversation();
+                        onChanged();
+                      },
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4),
+                  child: Icon(Icons.add_comment_outlined, size: 15, color: Palette.dim),
+                ),
+              ),
+            ),
           ),
         ],
       ),
