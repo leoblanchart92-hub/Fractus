@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../core/models.dart';
 import '../../core/state.dart';
 import '../../core/theme.dart';
+import '../../services/chat_runner.dart';
 import '../../services/chat_service.dart';
 import '../controller.dart';
 
@@ -49,35 +50,8 @@ class _ChatViewState extends State<ChatView> {
     final t = _text.text.trim();
     if (t.isEmpty || widget.state.chatBusy) return;
     _text.clear();
-    widget.state.addChat(ChatMessage('user', t));
-    final reply = ChatMessage('assistant', '…');
-    widget.state.addChat(reply);
-    widget.state.chatBusy = true;
-    widget.state.touch();
-    _scrollDown();
-    try {
-      final text = await widget.chat.send(
-        widget.state.chat.where((m) => !identical(m, reply)).toList(),
-        onDelta: (partial) {
-          reply.text = partial;
-          widget.state.touch();
-          _scrollDown();
-        },
-        onStatus: (status) {
-          // Entre deux tours, on montre l'outil en cours ; le prochain texte le remplacera.
-          reply.text = '⟡ $status…';
-          widget.state.touch();
-        },
-      );
-      reply.text = text.isEmpty ? '…' : text;
-    } catch (e) {
-      reply.text = 'Impossible de joindre Groq : $e';
-    } finally {
-      widget.state.chatBusy = false;
-      widget.state.saveChatSoon();
-      _scrollDown();
-      _focus.requestFocus();
-    }
+    await ChatRunner.send(widget.state, widget.chat, t, onUpdate: _scrollDown);
+    _focus.requestFocus();
   }
 
   void _scrollDown() {

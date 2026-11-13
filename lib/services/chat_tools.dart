@@ -600,6 +600,50 @@ class ChatTools {
     return out;
   }
 
+  // ── Depuis le téléphone (l'utilisateur a appuyé lui-même : pas de carte) ──
+
+  static const Map<String, String> quickLabels = {
+    'lock': 'Verrouiller le PC',
+    'sleep': 'Mettre en veille',
+    'mute': 'Couper / rétablir le son',
+    'volume_up': 'Volume +',
+    'volume_down': 'Volume −',
+    'play_pause': 'Lecture / pause',
+    'next': 'Piste suivante',
+    'prev': 'Piste précédente',
+  };
+
+  /// Une action rapide (boutons de l'appli téléphone et du widget).
+  Future<String> quick(String action) async {
+    final label = quickLabels[action];
+    if (label == null) return jsonEncode({'error': 'Action inconnue : $action'});
+    const keys = '''
+\$c = Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern void keybd_event(byte k, byte s, uint f, UIntPtr e);' -Name FxKey -Namespace Fx -PassThru
+function Tap(\$k) { \$c::keybd_event(\$k, 0, 0, [UIntPtr]::Zero); \$c::keybd_event(\$k, 0, 2, [UIntPtr]::Zero) }
+''';
+    final script = switch (action) {
+      'lock' => 'rundll32.exe user32.dll,LockWorkStation',
+      'sleep' => 'rundll32.exe powrprof.dll,SetSuspendState 0,1,0',
+      'mute' => '${keys}Tap 0xAD',
+      'volume_up' => '${keys}1..5 | ForEach-Object { Tap 0xAF }',
+      'volume_down' => '${keys}1..5 | ForEach-Object { Tap 0xAE }',
+      'play_pause' => '${keys}Tap 0xB3',
+      'next' => '${keys}Tap 0xB0',
+      _ => '${keys}Tap 0xB1',
+    };
+    final out = await _ps('$script; \'{"ok":true}\'');
+    journal?.record(kind: JournalKind.action, label: 'Téléphone : $label', detail: out.startsWith('{"error"') ? _oneLine(out) : null);
+    return out;
+  }
+
+  /// Une capture de l'écran en JPEG (pour l'appli téléphone), sans grille.
+  Future<List<int>?> screenJpeg({int maxWidth = 1100, int quality = 60}) async {
+    final path = '${Directory.systemTemp.path}${Platform.pathSeparator}fractus-remote.jpg';
+    final out = await _ps(psScreenshot(path: path, grid: false, maxWidth: maxWidth, quality: quality), timeoutSeconds: 30);
+    final shot = await readShot(out);
+    return shot?.bytes;
+  }
+
   // ── La mémoire longue ─────────────────────────────────────────────────────
 
   Future<String> _remember(Map<String, dynamic> args) async {

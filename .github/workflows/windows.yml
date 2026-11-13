@@ -1,4 +1,4 @@
-name: Windows
+name: Build
 
 on:
   push:
@@ -126,3 +126,58 @@ jobs:
             dist/Fractus-Setup-*.exe
             Fractus-Windows.zip
           generate_release_notes: true
+
+  android:
+    name: Build Fractus (Android)
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Scaffold Android project
+        working-directory: mobile
+        # Le squelette Android (gradle, icônes, styles) est généré ici ; seuls nos
+        # fichiers (manifest, Kotlin, layouts, Dart) sont versionnés et ne sont pas écrasés.
+        run: flutter create --platforms=android --project-name fractus_mobile --org app.fractus --no-pub .
+
+      - name: Build APK
+        working-directory: mobile
+        run: |
+          flutter pub get
+          flutter build apk --release
+          cp build/app/outputs/flutter-apk/app-release.apk ../Fractus-Android.apk
+
+      - name: Upload artifact (apk)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Fractus-Android
+          path: Fractus-Android.apk
+          if-no-files-found: error
+
+      - name: Attach to release (tags v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          # La release est créée par le job Windows : on l'attend (au plus 25 min).
+          for i in $(seq 1 50); do
+            if gh release view "${{ github.ref_name }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+              gh release upload "${{ github.ref_name }}" Fractus-Android.apk --clobber --repo "${{ github.repository }}"
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "Release introuvable" >&2
+          exit 1

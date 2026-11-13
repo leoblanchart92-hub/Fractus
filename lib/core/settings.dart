@@ -3,6 +3,7 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:path_provider/path_provider.dart';
 
@@ -30,6 +31,11 @@ class Settings {
   bool launchAtStartup = true;
   /// Chercher les nouvelles versions sur GitHub (au lancement puis toutes les 6 h).
   bool autoUpdate = true;
+  /// Contrôle depuis le téléphone (appli Android) : serveur sur le réseau local.
+  bool remoteEnabled = false;
+  int remotePort = 7790;
+  /// Code d'appairage (Bearer) demandé à chaque requête du téléphone.
+  String remoteToken = '';
 
   Map<String, dynamic> toJson() => {
         'openOnHover': openOnHover,
@@ -43,6 +49,9 @@ class Settings {
         'greetOnLaunch': greetOnLaunch,
         'launchAtStartup': launchAtStartup,
         'autoUpdate': autoUpdate,
+        'remoteEnabled': remoteEnabled,
+        'remotePort': remotePort,
+        'remoteToken': remoteToken,
       };
 
   static Settings fromJson(Map<String, dynamic> j) {
@@ -63,6 +72,9 @@ class Settings {
     s.greetOnLaunch = j['greetOnLaunch'] != false;
     s.launchAtStartup = j['launchAtStartup'] != false;
     s.autoUpdate = j['autoUpdate'] != false;
+    s.remoteEnabled = j['remoteEnabled'] == true;
+    s.remotePort = (j['remotePort'] is int) ? j['remotePort'] as int : 7790;
+    s.remoteToken = (j['remoteToken'] ?? '').toString();
     return s;
   }
 
@@ -89,6 +101,21 @@ class Settings {
     } catch (_) {}
     return Settings();
   }
+
+  /// Un code d'appairage lisible : 8 caractères sans ambiguïté (XXXX-XXXX).
+  static String newRemoteToken() {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    final r = Random.secure();
+    final b = StringBuffer();
+    for (var i = 0; i < 8; i++) {
+      if (i == 4) b.write('-');
+      b.write(alphabet[r.nextInt(alphabet.length)]);
+    }
+    return b.toString();
+  }
+
+  /// Le code tel qu'on le compare : sans tiret ni casse.
+  static String normalizeToken(String t) => t.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
 
   Future<void> save() async {
     try {

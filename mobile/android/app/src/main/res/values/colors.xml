@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="fx_bg">#F00E1120</color>
+    <color name="fx_card">#FF1C2136</color>
+    <color name="fx_ink">#FFF5F6F8</color>
+    <color name="fx_dim">#FF9398A1</color>
+    <color name="fx_accent">#FF38BDF8</color>
+    <color name="fx_green">#FF34D399</color>
+    <color name="fx_red">#FFF4505E</color>
+    <color name="fx_amber">#FFF5A524</color>
+</resources>

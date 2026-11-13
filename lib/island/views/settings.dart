@@ -1,12 +1,16 @@
 // Les réglages, dans l'île : affichage, son, hooks, chat, et la sortie.
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/settings.dart';
 import '../../core/state.dart';
 import '../../core/theme.dart';
 import '../../services/chat_service.dart';
 import '../../services/memory.dart';
+import '../../services/remote_server.dart';
 import '../../services/update_service.dart';
 import '../controller.dart';
 import '../widgets.dart';
@@ -24,6 +28,8 @@ class SettingsView extends StatefulWidget {
     required this.onStartupChanged,
     required this.chat,
     required this.memory,
+    required this.remote,
+    required this.onRemoteChanged,
   });
   final AppState state;
   final IslandController controller;
@@ -35,6 +41,9 @@ class SettingsView extends StatefulWidget {
   final ValueChanged<bool> onStartupChanged;
   final ChatService chat;
   final LongTermMemory memory;
+  final RemoteServer remote;
+  /// Le réglage « téléphone » a changé : (re)démarrer ou arrêter le serveur.
+  final Future<void> Function() onRemoteChanged;
 
   @override
   State<SettingsView> createState() => _SettingsViewState();
@@ -53,15 +62,43 @@ class _SettingsViewState extends State<SettingsView> {
   int? _memoryCount;
   bool _confirmForget = false;
 
+  List<String> _addresses = const [];
+  bool _remoteCopied = false;
+  String? _firewallMsg;
+
   @override
   void initState() {
     super.initState();
     _refreshMemory();
+    _refreshAddresses();
   }
 
-  Future<void> _refreshMemory() async {
-    final n = await widget.memory.count();
-    if (mounted) setState(() => _memoryCount = n);
+  Future<void> _refreshAddresses() async {
+    final a = await RemoteServer.localAddresses();
+    if (mounted) setState(() => _addresses = a);
+  }
+
+  Future<void> _openFirewall() async {
+    final port = widget.state.settings.remotePort;
+    setState(() => _firewallMsg = 'Demande d\'autorisation Windows…');
+    try {
+      // Un petit script élevé (UAC) : on retire l'ancienne règle, on pose la nouvelle.
+      final script = File('${Directory.systemTemp.path}${Platform.pathSeparator}fractus-firewall.ps1');
+      await script.writeAsString([
+        'netsh advfirewall firewall delete rule name="Fractus (telephone)" | Out-Null',
+        'netsh advfirewall firewall add rule name="Fractus (telephone)" dir=in action=allow protocol=TCP localport=$port profile=private,domain | Out-Null',
+        'exit \$LASTEXITCODE',
+      ].join('\r\n'));
+      final args = "'-NoProfile','-ExecutionPolicy','Bypass','-File','${script.path}'";
+      final r = await Process.run('powershell.exe', [
+        '-NoProfile',
+        '-Command',
+        '\$p = Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidden -PassThru -ArgumentList $args; exit \$p.ExitCode',
+      ]);
+      setState(() => _firewallMsg = r.exitCode == 0 ? 'Pare-feu ouvert sur le port $port (réseaux privés).' : 'Refusé ou échec (code ${r.exitCode}).');
+    } catch (e) {
+      setState(() => _firewallMsg = 'Échec : $e');
+    }
   }
 
   @override
@@ -261,6 +298,62 @@ class _SettingsViewState extends State<SettingsView> {
                 ),
               ],
             ),
+            _section('Téléphone (appli Android)'),
+            _toggle('Autoriser le contrôle depuis le téléphone (réseau local)', s.remoteEnabled, (v) {
+              s.remoteEnabled = v;
+              if (v && s.remoteToken.isEmpty) s.remoteToken = Settings.newRemoteToken();
+              widget.state.saveSettingsSoon();
+              widget.onRemoteChanged().then((_) {
+                if (mounted) setState(() {});
+              });
+            }),
+            if (s.remoteEnabled) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.remote.running
+                          ? 'Adresse : ${_addresses.isEmpty ? '(pas de réseau)' : _addresses.first}:${widget.remote.port}   ·   Code : ${s.remoteToken}'
+                          : (widget.remote.error ?? 'Serveur arrêté'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: ui(12, color: widget.remote.running ? Palette.ink : Palette.redText),
+                    ),
+                  ),
+                  IslandButton(
+                    label: _remoteCopied ? 'Copié' : 'Copier',
+                    compact: true,
+                    onTap: () async {
+                      final addr = _addresses.isEmpty ? '' : _addresses.first;
+                      await Clipboard.setData(ClipboardData(text: '$addr:${widget.remote.port ?? s.remotePort} ${s.remoteToken}'));
+                      setState(() => _remoteCopied = true);
+                    },
+                  ),
+                  const SizedBox(width: 6),
+                  IslandButton(
+                    label: 'Nouveau code',
+                    compact: true,
+                    onTap: () {
+                      s.remoteToken = Settings.newRemoteToken();
+                      widget.state.saveSettingsSoon();
+                      setState(() => _remoteCopied = false);
+                    },
+                  ),
+                  const SizedBox(width: 6),
+                  IslandButton(label: 'Pare-feu', compact: true, onTap: _openFirewall),
+                ],
+              ),
+              const SizedBox(height: 3),
+              Text(
+                _firewallMsg ??
+                    'Dans l\'appli Fractus sur le téléphone : entre cette adresse et ce code. Même Wi-Fi que le PC (ou Tailscale pour l\'extérieur). '
+                        'Si ça ne se connecte pas : « Pare-feu » (une fois, avec les droits administrateur).'
+                        '${_addresses.length > 1 ? ' Autres adresses : ${_addresses.skip(1).join(', ')}.' : ''}',
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: ui(11, color: Palette.dim3),
+              ),
+            ],
             _section('Mises à jour'),
             _toggle('Chercher les mises à jour automatiquement', s.autoUpdate, (v) {
               s.autoUpdate = v;

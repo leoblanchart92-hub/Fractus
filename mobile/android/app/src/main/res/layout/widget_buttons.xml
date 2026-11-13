@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La rangée de boutons, partagée par les deux widgets. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical">
+
+    <TextView android:id="@+id/btn_lock" style="@style/FxWidgetButton" android:text="🔒" />
+    <TextView android:id="@+id/btn_sleep" style="@style/FxWidgetButton" android:text="🌙" />
+    <TextView android:id="@+id/btn_mute" style="@style/FxWidgetButton" android:text="🔇" />
+    <TextView android:id="@+id/btn_play" style="@style/FxWidgetButton" android:text="⏯" />
+    <TextView android:id="@+id/btn_refresh" style="@style/FxWidgetButton" android:text="↻" />
+</LinearLayout>

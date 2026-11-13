@@ -17,6 +17,7 @@ import 'services/conversation_store.dart';
 import 'services/hook_server.dart';
 import 'services/journal.dart';
 import 'services/memory.dart';
+import 'services/remote_server.dart';
 import 'services/startup_service.dart';
 import 'services/tray_service.dart';
 import 'services/update_service.dart';
@@ -62,10 +63,25 @@ Future<void> main() async {
   });
   final startup = StartupService();
   final updates = UpdateService(autoCheck: settings.autoUpdate);
+  // Le téléphone : serveur sur le réseau local, protégé par le code d'appairage.
+  final remote = RemoteServer(state: state, controller: controller, chat: chat, tools: chat.tools, version: () => updates.currentVersion);
+  Future<void> applyRemote() async {
+    if (state.settings.remoteEnabled) {
+      if (state.settings.remoteToken.isEmpty) {
+        state.settings.remoteToken = Settings.newRemoteToken();
+        await state.settings.save();
+      }
+      await remote.start(state.settings.remotePort);
+    } else {
+      await remote.stop();
+    }
+    state.touch();
+  }
 
   Future<void> quit() async {
     await conversations.flush();
     await journal.flush();
+    await remote.stop();
     await hooks.stop();
     await tray.stop();
     await window.quit();
@@ -87,6 +103,7 @@ Future<void> main() async {
   updates.onBeforeInstall = () async {
     await conversations.flush();
     await journal.flush();
+    await remote.stop();
     await hooks.stop();
     await tray.stop();
   };
@@ -102,10 +119,13 @@ Future<void> main() async {
     onStartupChanged: startup.apply,
     journal: journal,
     memory: memory,
+    remote: remote,
+    onRemoteChanged: applyRemote,
   ));
 
   await window.show();
   await hooks.start(settings.hookPort);
+  await applyRemote();
   await tray.start();
   await startup.init();
   await startup.apply(settings.launchAtStartup);
@@ -141,6 +161,8 @@ class FractusApp extends StatelessWidget {
     required this.onStartupChanged,
     required this.journal,
     required this.memory,
+    required this.remote,
+    required this.onRemoteChanged,
   });
 
   final AppState state;
@@ -153,6 +175,8 @@ class FractusApp extends StatelessWidget {
   final ValueChanged<bool> onStartupChanged;
   final Journal journal;
   final LongTermMemory memory;
+  final RemoteServer remote;
+  final Future<void> Function() onRemoteChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -188,6 +212,8 @@ class FractusApp extends StatelessWidget {
           onStartupChanged: onStartupChanged,
           journal: journal,
           memory: memory,
+          remote: remote,
+          onRemoteChanged: onRemoteChanged,
         ),
       ),
     );

@@ -15,6 +15,7 @@ import '../companion/companion_view.dart';
 import '../services/chat_service.dart';
 import '../services/journal.dart';
 import '../services/memory.dart';
+import '../services/remote_server.dart';
 import '../services/update_service.dart';
 import 'controller.dart';
 import 'views/cards.dart';
@@ -39,6 +40,8 @@ class IslandWidget extends StatefulWidget {
     required this.onStartupChanged,
     required this.journal,
     required this.memory,
+    required this.remote,
+    required this.onRemoteChanged,
   });
 
   final AppState state;
@@ -52,6 +55,8 @@ class IslandWidget extends StatefulWidget {
   final ValueChanged<bool> onStartupChanged;
   final Journal journal;
   final LongTermMemory memory;
+  final RemoteServer remote;
+  final Future<void> Function() onRemoteChanged;
 
   @override
   State<IslandWidget> createState() => _IslandWidgetState();
@@ -354,6 +359,8 @@ class _IslandWidgetState extends State<IslandWidget> {
           onStartupChanged: widget.onStartupChanged,
           chat: widget.chat,
           memory: widget.memory,
+          remote: widget.remote,
+          onRemoteChanged: widget.onRemoteChanged,
         );
       case IslandView.journal:
         return JournalView(journal: widget.journal);
