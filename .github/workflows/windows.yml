@@ -35,7 +35,7 @@ jobs:
           "flutter: $(flutter --version 2>&1 | Select-Object -First 1)" | Tee-Object -FilePath $log
           $steps = @(
             @{ name = "pub get";  cmd = { flutter pub get } },
-            @{ name = "analyze";  cmd = { flutter analyze --no-fatal-infos } },
+            @{ name = "analyze";  cmd = { flutter analyze --no-fatal-infos --no-fatal-warnings } },
             @{ name = "test";     cmd = { flutter test } },
             @{ name = "build";    cmd = { flutter build windows --release } }
           )

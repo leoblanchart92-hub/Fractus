@@ -37,7 +37,7 @@ class IslandCard extends StatelessWidget {
                     gradient: RadialGradient(
                       center: const Alignment(0, 1.4),
                       radius: 1.1,
-                      colors: [washColor(wash), washColor(wash).withOpacity(0)],
+                      colors: [washColor(wash), washColor(wash).withValues(alpha: 0)],
                       stops: const [0, 1],
                     ),
                   ),
@@ -155,7 +155,7 @@ class KeyHint extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: c.withOpacity(0.55), width: 1),
+        border: Border.all(color: c.withValues(alpha: 0.55), width: 1),
       ),
       child: Text(label, style: ui(10, weight: FontWeight.w700, color: c, height: 1)),
     );
@@ -290,9 +290,9 @@ class _SessionPillState extends State<SessionPill> {
           height: 30,
           padding: const EdgeInsets.only(left: 6, right: 12),
           decoration: BoxDecoration(
-            color: c.withOpacity(_hover ? 0.22 : 0.13),
+            color: c.withValues(alpha: _hover ? 0.22 : 0.13),
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: c.withOpacity(0.38)),
+            border: Border.all(color: c.withValues(alpha: 0.38)),
           ),
           child: Row(
             children: [

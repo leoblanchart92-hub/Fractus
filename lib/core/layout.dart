@@ -209,19 +209,19 @@ enum Wash { red, green, pink, amber, cyan, indigo, soft, none }
 Color washColor(Wash wash) {
   switch (wash) {
     case Wash.red:
-      return const Color(0xFFF4505E).withOpacity(0.55);
+      return const Color(0xFFF4505E).withValues(alpha: 0.55);
     case Wash.green:
-      return const Color(0xFF34D399).withOpacity(0.5);
+      return const Color(0xFF34D399).withValues(alpha: 0.5);
     case Wash.pink:
-      return const Color(0xFFF472B6).withOpacity(0.55);
+      return const Color(0xFFF472B6).withValues(alpha: 0.55);
     case Wash.amber:
-      return const Color(0xFFF5A524).withOpacity(0.42);
+      return const Color(0xFFF5A524).withValues(alpha: 0.42);
     case Wash.cyan:
-      return const Color(0xFF22D3EE).withOpacity(0.38);
+      return const Color(0xFF22D3EE).withValues(alpha: 0.38);
     case Wash.indigo:
-      return const Color(0xFF6366F1).withOpacity(0.5);
+      return const Color(0xFF6366F1).withValues(alpha: 0.5);
     case Wash.soft:
-      return const Color(0xFFFFFFFF).withOpacity(0.08);
+      return const Color(0xFFFFFFFF).withValues(alpha: 0.08);
     case Wash.none:
       return const Color(0x00000000);
   }

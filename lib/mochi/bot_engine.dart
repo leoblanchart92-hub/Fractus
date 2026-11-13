@@ -310,7 +310,7 @@ class BotEngine extends ChangeNotifier {
         _later(500, () => _emit(_PType.spark, 5));
         break;
       case BotState.error:
-        anim(_Prop.ox, [
+        _anim(_Prop.ox, [
           _Key(0.08, 50, Ease.out),
           _Key(-0.08, 70, Ease.inOut),
           _Key(0.05, 70, Ease.inOut),
@@ -318,7 +318,7 @@ class BotEngine extends ChangeNotifier {
         ]);
         break;
       case BotState.approval:
-        anim(_Prop.oy, [_Key(-0.2, 150, Ease.out), _Key(0, 300, Ease.back)]);
+        _anim(_Prop.oy, [_Key(-0.2, 150, Ease.out), _Key(0, 300, Ease.back)]);
         break;
       case BotState.dizzy:
         doRoll(1300, 2);
@@ -339,22 +339,22 @@ class BotEngine extends ChangeNotifier {
     if (key == _badgeKey) return;
     _badgeKey = key;
     final tok = ++_badgeToken;
-    anim(_Prop.badgeS, [_Key(0, 90, Ease.inOut)]);
+    _anim(_Prop.badgeS, [_Key(0, 90, Ease.inOut)]);
     _later(100, () {
       if (tok != _badgeToken) return;
       badge = b;
-      if (b != null) anim(_Prop.badgeS, [_Key(1, 280, Ease.back)]);
+      if (b != null) _anim(_Prop.badgeS, [_Key(1, 280, Ease.back)]);
     });
   }
 
   void blink() {
     if (_locks.contains(_Prop.open)) return;
-    anim(_Prop.open, [_Key(0.06, 70, Ease.inOut), _Key(1, 130, Ease.out)]);
+    _anim(_Prop.open, [_Key(0.06, 70, Ease.inOut), _Key(1, 130, Ease.out)]);
   }
 
   void squash() {
-    anim(_Prop.sy, [_Key(0.78, 70, Ease.out), _Key(1.1, 130, Ease.out), _Key(1, 170, Ease.inOut)]);
-    anim(_Prop.sx, [_Key(1.16, 70, Ease.out), _Key(0.95, 130, Ease.out), _Key(1, 170, Ease.inOut)]);
+    _anim(_Prop.sy, [_Key(0.78, 70, Ease.out), _Key(1.1, 130, Ease.out), _Key(1, 170, Ease.inOut)]);
+    _anim(_Prop.sx, [_Key(1.16, 70, Ease.out), _Key(0.95, 130, Ease.out), _Key(1, 170, Ease.inOut)]);
   }
 
   void slap() {
@@ -377,7 +377,7 @@ class BotEngine extends ChangeNotifier {
 
   void doRoll(int durationMs, int turns) {
     roll = 0;
-    anim(_Prop.roll, [_Key(math.pi * 2 * turns, durationMs.toDouble(), Ease.inOut)], () => roll = 0);
+    _anim(_Prop.roll, [_Key(math.pi * 2 * turns, durationMs.toDouble(), Ease.inOut)], () => roll = 0);
   }
 
   /// Le petit salut de la main — le « coucou ». Timings de BotEngine.greet().
@@ -389,12 +389,12 @@ class BotEngine extends ChangeNotifier {
 
     eyeOverride = EyeShape.happy;
     eyeOverrideUntil = t + 2.0;
-    anim(_Prop.oy, [_Key(-0.06, 220, Ease.out), _Key(0.0, 220, Ease.back)]);
+    _anim(_Prop.oy, [_Key(-0.06, 220, Ease.out), _Key(0.0, 220, Ease.back)]);
 
     _later(250, () {
       if (_greetToken != tok) return;
-      anim(_Prop.sy, [_Key(0.95, 100, Ease.out), _Key(1.0, 260, Ease.back)]);
-      anim(_Prop.sx, [_Key(1.04, 100, Ease.out), _Key(1.0, 260, Ease.back)]);
+      _anim(_Prop.sy, [_Key(0.95, 100, Ease.out), _Key(1.0, 260, Ease.back)]);
+      _anim(_Prop.sx, [_Key(1.04, 100, Ease.out), _Key(1.0, 260, Ease.back)]);
       onSound?.call('greet');
     });
     _later(550, () {
@@ -455,48 +455,48 @@ class BotEngine extends ChangeNotifier {
 
     switch (emote) {
       case BotEmote.love:
-        anim(_Prop.blush, [
+        _anim(_Prop.blush, [
           _Key(1, 300, Ease.out),
           _Key(1, (duration - 0.6) * 1000, Ease.lin),
           _Key(0, 300, Ease.inOut),
         ]);
         _emit(_PType.heart, 4);
-        anim(_Prop.oy, [_Key(-0.1, 160, Ease.out), _Key(0, 300, Ease.back)]);
+        _anim(_Prop.oy, [_Key(-0.1, 160, Ease.out), _Key(0, 300, Ease.back)]);
         break;
       case BotEmote.surprised:
-        anim(_Prop.oy, [_Key(-0.3, 140, Ease.out), _Key(0, 380, Ease.back)]);
-        anim(_Prop.es, [_Key(1.25, 120, Ease.out), _Key(1, 500, Ease.inOut)]);
+        _anim(_Prop.oy, [_Key(-0.3, 140, Ease.out), _Key(0, 380, Ease.back)]);
+        _anim(_Prop.es, [_Key(1.25, 120, Ease.out), _Key(1, 500, Ease.inOut)]);
         break;
       case BotEmote.proud:
         _emit(_PType.star, 5);
-        anim(_Prop.tilt, [
+        _anim(_Prop.tilt, [
           _Key(-0.14, 220, Ease.out),
           _Key(-0.14, (duration - 0.5) * 1000, Ease.lin),
           _Key(0, 280, Ease.inOut),
         ]);
-        anim(_Prop.blush, [
+        _anim(_Prop.blush, [
           _Key(0.7, 250, Ease.out),
           _Key(0.7, (duration - 0.5) * 1000, Ease.lin),
           _Key(0, 300, Ease.inOut),
         ]);
         break;
       case BotEmote.wink:
-        anim(_Prop.tilt, [
+        _anim(_Prop.tilt, [
           _Key(0.12, 160, Ease.out),
           _Key(0.12, (duration - 0.4) * 1000, Ease.lin),
           _Key(0, 240, Ease.inOut),
         ]);
         break;
       case BotEmote.yawn:
-        anim(_Prop.sy, [_Key(1.12, 500, Ease.inOut), _Key(1, 500, Ease.inOut)]);
-        anim(_Prop.sx, [_Key(0.94, 500, Ease.inOut), _Key(1, 500, Ease.inOut)]);
+        _anim(_Prop.sy, [_Key(1.12, 500, Ease.inOut), _Key(1, 500, Ease.inOut)]);
+        _anim(_Prop.sx, [_Key(0.94, 500, Ease.inOut), _Key(1, 500, Ease.inOut)]);
         _later(700, () {
           eyeOverride = EyeShape.closed;
           _emit(_PType.z, 2);
         });
         break;
       case BotEmote.happy:
-        anim(_Prop.blush, [_Key(0.6, 200, Ease.out), _Key(0, 600, Ease.inOut)]);
+        _anim(_Prop.blush, [_Key(0.6, 200, Ease.out), _Key(0, 600, Ease.inOut)]);
         break;
       case BotEmote.annoyed:
         eyeOverride = EyeShape.line;
@@ -609,7 +609,7 @@ class BotEngine extends ChangeNotifier {
     }
   }
 
-  void anim(_Prop prop, List<_Key> keys, [VoidCallback? onComplete]) {
+  void _anim(_Prop prop, List<_Key> keys, [VoidCallback? onComplete]) {
     _tweens[prop] = _Tween(prop, keys, _get(prop), _nowMs(), onComplete);
     _locks.add(prop);
   }
@@ -737,14 +737,14 @@ class BotEngine extends ChangeNotifier {
           miniNextBehavior = n + 0.4;
           return;
         }
-        anim(_Prop.oy, [_Key(-0.3, 120, Ease.out), _Key(0.03, 200, Ease.inOut), _Key(0, 160, Ease.back)]);
-        anim(_Prop.sy, [
+        _anim(_Prop.oy, [_Key(-0.3, 120, Ease.out), _Key(0.03, 200, Ease.inOut), _Key(0, 160, Ease.back)]);
+        _anim(_Prop.sy, [
           _Key(0.82, 80, Ease.out),
           _Key(1.18, 130, Ease.out),
           _Key(0.88, 160, Ease.inOut),
           _Key(1, 200, Ease.back)
         ]);
-        anim(_Prop.sx, [
+        _anim(_Prop.sx, [
           _Key(1.15, 80, Ease.out),
           _Key(0.88, 130, Ease.out),
           _Key(1.06, 160, Ease.inOut),
@@ -757,7 +757,7 @@ class BotEngine extends ChangeNotifier {
           miniNextBehavior = n + 0.5;
           return;
         }
-        anim(_Prop.yaw, [
+        _anim(_Prop.yaw, [
           _Key(-0.65, 50, Ease.out),
           _Key(0.65, 90, Ease.inOut),
           _Key(-0.5, 80, Ease.inOut),
@@ -770,12 +770,12 @@ class BotEngine extends ChangeNotifier {
       case BotEmote.wink:
         eyeOverride = EyeShape.wink;
         eyeOverrideUntil = n + 0.55;
-        anim(_Prop.tilt, [_Key(0.13, 100, Ease.out), _Key(0.13, 320, Ease.lin), _Key(0, 200, Ease.inOut)]);
+        _anim(_Prop.tilt, [_Key(0.13, 100, Ease.out), _Key(0.13, 320, Ease.lin), _Key(0, 200, Ease.inOut)]);
         miniNextBehavior = n + 2.2 + _rng.nextDouble() * 2.0;
         break;
       case BotEmote.love:
         _emit(_PType.heart, 2);
-        anim(_Prop.tilt, [_Key(-0.1, 180, Ease.out), _Key(0.1, 340, Ease.inOut), _Key(0, 220, Ease.inOut)]);
+        _anim(_Prop.tilt, [_Key(-0.1, 180, Ease.out), _Key(0.1, 340, Ease.inOut), _Key(0, 220, Ease.inOut)]);
         miniNextBehavior = n + 2.6 + _rng.nextDouble() * 1.5;
         break;
       default:
@@ -808,7 +808,7 @@ class BotEngine extends ChangeNotifier {
       x.save();
       x.clipPath(body);
       final yOffset = math.sin(yaw) * rx * 0.8;
-      final paint = Paint()..color = const Color(0xFFFF7896).withOpacity(0.5 * blushVal);
+      final paint = Paint()..color = const Color(0xFFFF7896).withValues(alpha: 0.5 * blushVal);
       for (final sd in [-1, 1]) {
         x.drawOval(
           Rect.fromCenter(center: Offset(sd * rx * 0.55 + yOffset, ry * 0.2), width: R * 0.34, height: R * 0.2),
@@ -867,7 +867,7 @@ class BotEngine extends ChangeNotifier {
           ..shader = ui.Gradient.linear(
             Offset(0, ry),
             Offset(0, -ry),
-            [col.withOpacity(0.72 * tint), col.withOpacity(0)],
+            [col.withValues(alpha: 0.72 * tint), col.withValues(alpha: 0)],
           ),
       );
     }
@@ -1150,15 +1150,15 @@ class BotEngine extends ChangeNotifier {
       switch (p.type) {
         case _PType.heart:
           x.rotate(math.sin(p.age * 6) * 0.3);
-          x.drawPath(_heart(sz), Paint()..color = const Color(0xFFFF4D6D).withOpacity(alpha));
+          x.drawPath(_heart(sz), Paint()..color = const Color(0xFFFF4D6D).withValues(alpha: alpha));
           break;
         case _PType.star:
           x.rotate(p.rot + p.age * 2);
-          x.drawPath(_star(sz, sz * 0.45), Paint()..color = const Color(0xFFF7B32B).withOpacity(alpha));
+          x.drawPath(_star(sz, sz * 0.45), Paint()..color = const Color(0xFFF7B32B).withValues(alpha: alpha));
           break;
         case _PType.spark:
           x.rotate(p.rot);
-          x.drawPath(_star(sz * 0.8, sz * 0.18), Paint()..color = const Color(0xFFFFFFFF).withOpacity(alpha));
+          x.drawPath(_star(sz * 0.8, sz * 0.18), Paint()..color = const Color(0xFFFFFFFF).withValues(alpha: alpha));
           break;
         case _PType.sweat:
           final path = Path()
@@ -1166,14 +1166,14 @@ class BotEngine extends ChangeNotifier {
             ..quadraticBezierTo(sz * 0.8, sz * 0.2, 0, sz * 0.6)
             ..quadraticBezierTo(-sz * 0.8, sz * 0.2, 0, -sz)
             ..close();
-          x.drawPath(path, Paint()..color = const Color(0xFF7CC7FF).withOpacity(alpha));
+          x.drawPath(path, Paint()..color = const Color(0xFF7CC7FF).withValues(alpha: alpha));
           break;
         case _PType.z:
           final tp = TextPainter(
             text: TextSpan(
               text: 'z',
               style: TextStyle(
-                color: const Color(0xFFD1DBEB).withOpacity(alpha),
+                color: const Color(0xFFD1DBEB).withValues(alpha: alpha),
                 fontSize: sz * 1.9,
                 fontWeight: FontWeight.w700,
                 fontFamily: 'Segoe UI',

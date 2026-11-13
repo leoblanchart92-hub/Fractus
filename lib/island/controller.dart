@@ -372,26 +372,6 @@ class IslandController extends ChangeNotifier {
     }
   }
 
-  String _titleFor(String tool) {
-    switch (tool) {
-      case 'Bash':
-        return 'veut lancer une commande';
-      case 'Edit':
-      case 'MultiEdit':
-      case 'NotebookEdit':
-        return 'veut modifier un fichier';
-      case 'Write':
-        return 'veut écrire un fichier';
-      case 'Read':
-        return 'veut lire un fichier';
-      case 'WebFetch':
-      case 'WebSearch':
-        return 'veut aller sur le web';
-      default:
-        return 'veut utiliser $tool';
-    }
-  }
-
   String alwaysKey(ApprovalInfo a) {
     final cmd = a.toolName == 'Bash' ? a.summary.split(' ').first : '';
     return '${a.toolName}|$cmd';

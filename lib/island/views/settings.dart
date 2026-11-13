@@ -192,7 +192,7 @@ class _SettingsViewState extends State<SettingsView> {
             child: FittedBox(
               child: Switch(
                 value: value,
-                activeColor: Palette.blue,
+                activeThumbColor: Palette.blue,
                 onChanged: (v) {
                   onChanged(v);
                   setState(() {});

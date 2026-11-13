@@ -71,8 +71,8 @@ class _MochiViewState extends State<MochiView> with SingleTickerProviderStateMix
                       shape: BoxShape.circle,
                       gradient: RadialGradient(
                         colors: [
-                          glowColor.withOpacity(glowOpacity),
-                          glowColor.withOpacity(0),
+                          glowColor.withValues(alpha: glowOpacity),
+                          glowColor.withValues(alpha: 0),
                         ],
                         stops: const [0, 0.62],
                       ),
