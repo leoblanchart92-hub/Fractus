@@ -13,7 +13,7 @@ dependencies:
   # Fenêtre sans bordure, toujours au premier plan, hors barre des tâches.
   window_manager: ^0.4.3
   # Position du curseur à l'écran (pour réveiller l'île et que Mochi suive la souris).
-  screen_retriever: ^0.1.9
+  screen_retriever: ^0.2.0
   # Fond de fenêtre réellement transparent sous Windows.
   flutter_acrylic: ^1.1.4
   # Appels HTTP (chat avec un modèle).
