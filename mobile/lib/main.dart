@@ -1,8 +1,6 @@
 // Fractus sur le téléphone : la même île que sur le PC — Fractus, ses cartes,
-// ses étapes en direct — posée en haut de l'écran, au-dessus de l'écran du PC.
+// ses étapes en direct — en plein écran.
 // Tout passe par le serveur « téléphone » de Fractus sur le PC (réseau local).
-
-import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -92,78 +90,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return Scaffold(
       resizeToAvoidBottomInset: false,
-      body: Stack(
-        children: [
-          // Le bureau du PC, en direct, derrière l'île — comme sur le PC.
-          Positioned.fill(child: PcScreen(link: link)),
-          // L'île, collée au bord haut (sous la barre d'état).
-          Positioned(
-            top: MediaQuery.of(context).padding.top,
-            left: 0,
-            right: 0,
-            child: PhoneIsland(link: link, bot: _bot),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// L'écran du PC rafraîchi toutes les deux secondes quand le PC répond.
-class PcScreen extends StatefulWidget {
-  const PcScreen({super.key, required this.link});
-  final PcLink link;
-
-  @override
-  State<PcScreen> createState() => _PcScreenState();
-}
-
-class _PcScreenState extends State<PcScreen> {
-  Timer? _timer;
-  String? _url;
-
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 2), (_) => _refresh());
-    _refresh();
-  }
-
-  void _refresh() {
-    final c = widget.link.client;
-    if (!mounted || !widget.link.online || c == null) return;
-    setState(() => _url = c.screenUrl(width: 900));
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: widget.link,
-      builder: (context, _) {
-        final url = _url;
-        final online = widget.link.online && url != null;
-        return Container(
-          color: const Color(0xFF05060B),
-          alignment: Alignment.center,
-          child: online
-              ? Image.network(
-                  url,
-                  fit: BoxFit.contain,
-                  gaplessPlayback: true,
-                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                )
-              : Opacity(
-                  opacity: 0.35,
-                  child: Text('Fractus', style: ui(13, weight: FontWeight.w600, color: Palette.dim3)),
-                ),
-        );
-      },
+      body: PhoneIsland(link: link, bot: _bot),
     );
   }
 }

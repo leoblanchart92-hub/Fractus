@@ -2,19 +2,22 @@
 // d'ensemble avec les étapes en direct, permission, question, vide, chat,
 // journal, réglages), nourries par l'état que le PC envoie.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../core/layout.dart';
 import '../core/models.dart';
 import '../core/theme.dart';
-import 'widgets.dart';
 import '../models.dart';
 import '../prefs.dart';
 import 'bridge.dart';
+import 'widgets.dart';
 
-const EdgeInsets _cardPad = EdgeInsets.only(left: 108, top: 12, right: 14, bottom: 12);
-const EdgeInsets _listPad = EdgeInsets.only(left: 96, right: 10, top: 8, bottom: 8);
+// En plein écran, Fractus est au-dessus des cartes : pas de marge à gauche.
+const EdgeInsets _cardPad = EdgeInsets.fromLTRB(16, 14, 16, 14);
+const EdgeInsets _listPad = EdgeInsets.fromLTRB(14, 10, 12, 10);
 
 String _hm(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
@@ -48,7 +51,7 @@ class _PhoneOverviewState extends State<PhoneOverview> {
       children: [
         Expanded(
           child: IslandCard(
-            padding: const EdgeInsets.only(left: 108, top: 12, right: 12, bottom: 10),
+            padding: _cardPad,
             child: _FocusCard(session: front),
           ),
         ),
@@ -97,19 +100,44 @@ class _FocusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final steps = session.steps.length > 5 ? session.steps.sublist(session.steps.length - 5) : session.steps;
+    final steps = session.steps;
+    final message = session.lastMessage;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         TitleRow(color: session.color, project: session.project, subtitle: _subtitle),
-        const SizedBox(height: 6),
-        if (steps.isEmpty)
-          Text(session.prompt ?? 'En attente…', maxLines: 2, overflow: TextOverflow.ellipsis, style: ui(13, color: Palette.dim)),
-        for (var i = 0; i < steps.length; i++) _StepRow(step: steps[i], current: i == steps.length - 1 && session.isActive),
-        if (session.lastMessage != null && session.lastMessage!.trim().isNotEmpty && !session.isActive) ...[
-          const SizedBox(height: 4),
-          Text(_firstLines(session.lastMessage!), maxLines: 2, overflow: TextOverflow.ellipsis, style: ui(12.5, color: Palette.dim)),
+        if (session.prompt != null && session.prompt!.trim().isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(session.prompt!, maxLines: 3, overflow: TextOverflow.ellipsis, style: ui(13, color: Palette.dim, height: 1.3)),
+        ],
+        const SizedBox(height: 8),
+        Text('CE QU\'IL FAIT', style: ui(10, weight: FontWeight.w700, color: Palette.dim4)),
+        const SizedBox(height: 4),
+        Expanded(
+          child: steps.isEmpty
+              ? Align(
+                  alignment: Alignment.topLeft,
+                  child: Text(session.isActive ? 'Il démarre…' : 'En attente…', style: ui(13, color: Palette.dim3)),
+                )
+              // La liste est inversée : la dernière étape en bas, toujours visible.
+              : ListView.builder(
+                  reverse: true,
+                  padding: EdgeInsets.zero,
+                  itemCount: steps.length,
+                  itemBuilder: (_, i) {
+                    final idx = steps.length - 1 - i;
+                    return _StepRow(step: steps[idx], current: idx == steps.length - 1 && session.isActive);
+                  },
+                ),
+        ),
+        if (message != null && message.trim().isNotEmpty && !session.isActive) ...[
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(color: Palette.tabOn, borderRadius: BorderRadius.circular(12)),
+            child: Text(_firstLines(message), maxLines: 4, overflow: TextOverflow.ellipsis, style: ui(12.5, color: Palette.ink, height: 1.35)),
+          ),
         ],
       ],
     );
@@ -117,7 +145,7 @@ class _FocusCard extends StatelessWidget {
 
   static String _firstLines(String m) {
     final clean = m.replaceAll(RegExp(r'[#*`>_]'), '').trim();
-    return clean.split('\n').where((l) => l.trim().isNotEmpty).take(2).join(' ');
+    return clean.split('\n').where((l) => l.trim().isNotEmpty).take(4).join(' ');
   }
 }
 
@@ -142,7 +170,7 @@ class _StepRow extends StatelessWidget {
           Expanded(
             child: Text(
               step.text,
-              maxLines: 1,
+              maxLines: current ? 2 : 1,
               overflow: TextOverflow.ellipsis,
               style: ui(size, weight: current ? FontWeight.w500 : FontWeight.w400, color: color),
             ),
@@ -168,7 +196,7 @@ class PhoneEmpty extends StatelessWidget {
     final host = link.info?.host ?? '';
     return IslandCard(
       wash: online ? Wash.soft : Wash.red,
-      padding: const EdgeInsets.only(left: 116, top: 14, right: 14, bottom: 12),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
@@ -179,11 +207,11 @@ class PhoneEmpty extends StatelessWidget {
             online
                 ? 'Rien ne tourne sur ${link.status?.host ?? 'le PC'} pour l\'instant. Demande-moi quelque chose, je le ferai là-bas.'
                 : (link.error ?? 'Vérifie que Fractus est ouvert sur le PC et que le téléphone est sur le même réseau ($host).'),
-            maxLines: 2,
+            maxLines: 4,
             overflow: TextOverflow.ellipsis,
-            style: ui(12.5, color: Palette.dim),
+            style: ui(12.5, color: Palette.dim, height: 1.35),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
           Row(
             children: [
               if (online)
@@ -241,16 +269,27 @@ class PhoneApproval extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           TitleRow(color: color, project: a.project, subtitle: _title(a, agent)),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           CodeChip(a.summary.isEmpty ? a.tool : a.summary),
-          const Spacer(),
+          const SizedBox(height: 10),
+          Expanded(
+            child: a.preview == null || a.preview!.trim().isEmpty
+                ? const SizedBox.shrink()
+                : Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: Palette.cardFlat, borderRadius: BorderRadius.circular(12), border: Border.all(color: Palette.hairline)),
+                    child: SingleChildScrollView(child: Text(a.preview!, style: mono(11.5, color: Palette.dim))),
+                  ),
+          ),
+          const SizedBox(height: 12),
           Row(
             children: [
-              IslandButton(label: 'Refuser', onTap: () => decide('deny')),
+              Expanded(child: IslandButton(label: 'Refuser', onTap: () => decide('deny'))),
               const SizedBox(width: 8),
-              IslandButton(label: 'Autoriser', primary: true, onTap: () => decide('allow')),
+              Expanded(child: IslandButton(label: 'Autoriser', primary: true, onTap: () => decide('allow'))),
               const SizedBox(width: 8),
-              IslandButton(label: 'Toujours', onTap: () => decide('always')),
+              Expanded(child: IslandButton(label: 'Toujours', onTap: () => decide('always'))),
             ],
           ),
         ],
@@ -319,8 +358,8 @@ class _PhoneQuestionState extends State<PhoneQuestion> {
             ],
           ),
           const SizedBox(height: 4),
-          Text(q.question, maxLines: 2, overflow: TextOverflow.ellipsis, style: ui(15.5, weight: FontWeight.w700)),
-          const SizedBox(height: 8),
+          Text(q.question, maxLines: 6, overflow: TextOverflow.ellipsis, style: ui(15.5, weight: FontWeight.w700, height: 1.3)),
+          const SizedBox(height: 12),
           Expanded(
             child: SingleChildScrollView(
               child: Wrap(
@@ -412,7 +451,7 @@ class _PhoneChatState extends State<PhoneChat> {
     }
     final quick = st?.quickActions ?? const <String, String>{};
     return Padding(
-      padding: const EdgeInsets.only(left: 96, right: 12, bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Column(
         children: [
           _TopBar(link: widget.link),
@@ -1018,6 +1057,82 @@ class _PhoneSettingsState extends State<PhoneSettings> {
         style: ui(12),
         cursorColor: Palette.ink,
         decoration: InputDecoration(isDense: true, isCollapsed: true, border: InputBorder.none, hintText: hint, hintStyle: ui(12, color: Palette.dim3)),
+      ),
+    );
+  }
+}
+
+// ─── L'écran du PC, dans l'île ───────────────────────────────────────────────
+
+class PhoneScreen extends StatefulWidget {
+  const PhoneScreen({super.key, required this.link});
+  final PcLink link;
+
+  @override
+  State<PhoneScreen> createState() => _PhoneScreenState();
+}
+
+class _PhoneScreenState extends State<PhoneScreen> {
+  Timer? _timer;
+  String? _url;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 2), (_) => _refresh());
+    _refresh();
+  }
+
+  void _refresh() {
+    final c = widget.link.client;
+    if (!mounted || !widget.link.online || c == null) return;
+    setState(() => _url = c.screenUrl(width: 1100));
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final url = _url;
+    final online = widget.link.online && url != null;
+    return IslandCard(
+      padding: _listPad,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('ÉCRAN DU PC', style: ui(10, weight: FontWeight.w700, color: Palette.dim4)),
+              const SizedBox(width: 8),
+              Text(online ? 'toutes les 2 s · pince pour zoomer' : 'hors ligne', style: ui(10, color: Palette.dim4)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                color: Palette.cardFlat,
+                alignment: Alignment.center,
+                child: online
+                    ? InteractiveViewer(
+                        maxScale: 5,
+                        child: Image.network(
+                          url,
+                          fit: BoxFit.contain,
+                          gaplessPlayback: true,
+                          errorBuilder: (_, __, ___) => Text('Capture indisponible', style: ui(12, color: Palette.dim3)),
+                        ),
+                      )
+                    : Text('Connecte-toi au PC pour voir son écran.', style: ui(12, color: Palette.dim3)),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

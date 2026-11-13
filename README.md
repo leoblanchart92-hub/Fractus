@@ -76,10 +76,10 @@ lui, s'appelle **Fractus** : un petit cristal aux grands yeux.
 3. Depuis l'extérieur : [Tailscale](https://tailscale.com) sur le PC et le téléphone, puis l'adresse Tailscale
    du PC (`100.x.x.x:7790`). Pas de serveur relais : rien ne transite ailleurs que entre tes deux appareils.
 
-Sur le téléphone, c'est **la même île que sur le PC** : Fractus animé (tape-le trois fois…), les mêmes cartes
-(permission avec Refuser / Autoriser / Toujours, question, session en cours avec ses étapes en direct), le chat,
-le journal avec Annuler, et les réglages du PC — posée en haut de l'écran, au-dessus de l'écran du PC en direct.
-La croix la replie en petite île (Fractus + les minis des sessions) ; une demande la rouvre toute seule.
+Sur le téléphone, c'est **la même île que sur le PC**, en plein écran : Fractus animé (tape-le trois fois…),
+les mêmes cartes (permission avec Refuser / Autoriser / Toujours et l'aperçu de ce qu'il veut faire, question,
+session en cours avec ses étapes en direct), le chat, le journal avec Annuler, l'écran du PC (onglet écran,
+pince pour zoomer) et les réglages du PC. Une demande du PC passe devant toute seule.
 
 Le serveur « téléphone » (`lib/services/remote_server.dart`) n'écoute que si l'option est active, exige le code
 à chaque requête, et consigne les actions rapides dans le journal. Le code source de l'appli est dans `mobile/`
