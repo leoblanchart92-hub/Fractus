@@ -23,7 +23,15 @@ class GroqModel {
 }
 
 class ChatService {
-  ChatService({required this.apiKey, required this.model, required this.tools, this.webSearch = false});
+  ChatService({required this.apiKey, required this.model, required this.tools, this.webSearch = false}) {
+    tools.vision = describeImage;
+  }
+
+  /// Modèles qui voient les images, du meilleur au plus léger.
+  static const List<String> visionPreferred = [
+    'meta-llama/llama-4-maverick-17b-128e-instruct',
+    'meta-llama/llama-4-scout-17b-16e-instruct',
+  ];
 
   static const String baseUrl = 'https://api.groq.com/openai/v1';
 
@@ -62,6 +70,60 @@ class ChatService {
     if (webSearch) return compoundModel;
     if (model.trim().isNotEmpty) return model.trim();
     return _autoModel ?? preferred[3];
+  }
+
+  /// Décrit une image JPEG avec un modèle vision de Groq.
+  Future<String> describeImage(List<int> jpeg, String prompt) async {
+    if (!configured) throw Exception('clé Groq manquante');
+    if (models.isEmpty) {
+      try {
+        await listModels();
+      } catch (_) {}
+    }
+    final ids = models.map((m) => m.id).toSet();
+    String? model;
+    for (final v in visionPreferred) {
+      if (ids.isEmpty || ids.contains(v)) {
+        model = v;
+        break;
+      }
+    }
+    if (model == null) {
+      for (final id in ids) {
+        if (id.contains('llama-4') || id.contains('vision')) {
+          model = id;
+          break;
+        }
+      }
+    }
+    if (model == null) throw Exception('aucun modèle vision disponible sur ce compte Groq');
+    final res = await http
+        .post(
+          Uri.parse('$baseUrl/chat/completions'),
+          headers: _headers,
+          body: jsonEncode({
+            'model': model,
+            'max_tokens': 1024,
+            'temperature': 0.2,
+            'messages': [
+              {
+                'role': 'user',
+                'content': [
+                  {'type': 'text', 'text': prompt},
+                  {
+                    'type': 'image_url',
+                    'image_url': {'url': 'data:image/jpeg;base64,${base64Encode(jpeg)}'},
+                  },
+                ],
+              },
+            ],
+          }),
+        )
+        .timeout(const Duration(seconds: 60));
+    if (res.statusCode != 200) throw Exception(_errorText(res));
+    final j = jsonDecode(utf8.decode(res.bodyBytes));
+    final content = j['choices']?[0]?['message']?['content'];
+    return content is String ? content.trim() : '';
   }
 
   Map<String, String> get _headers => {
@@ -132,9 +194,12 @@ Tu es Fractus, l'assistant IA personnel de l'utilisateur : un agent de haut nive
 Tu agis directement sur la machine de l'utilisateur (dossier de travail « ${tools.baseDir()} ») avec des outils :
 - lecture libre : get_sessions, read_file, list_directory, search_text, get_datetime, system_info, list_processes, list_windows, notify ;
 - fichiers et code : write_file, edit_file, run_command (PowerShell), fetch_url ;
-- le PC : open (applis, fichiers, dossiers, URL), focus_window, send_keys (clavier dans la fenêtre active), kill_process, clipboard_get / clipboard_set, screenshot, set_volume, power (verrouiller, veille, redémarrer, éteindre).
+- le PC : open (applis, fichiers, dossiers, URL), list_windows (avec positions), focus_window, window_action (réduire, agrandir, fermer, déplacer), send_keys (clavier dans la fenêtre active), kill_process, clipboard_get / clipboard_set, screenshot, set_volume, notify, power (verrouiller, veille, redémarrer, éteindre) ;
+- tes yeux et ta main : look_at_screen (ce qui est affiché + coordonnées des éléments), click, move_mouse, scroll, drag, get_mouse_position.
 Chaque action affiche une carte Autoriser / Refuser / Toujours à l'utilisateur ; s'il refuse, tu n'insistes pas, tu proposes autre chose. Tu ne demandes jamais la permission par écrit : appelle l'outil, la carte s'en charge.
-Pour piloter une application : open → list_windows / focus_window → send_keys, étape par étape, en vérifiant (list_windows, screenshot) que ça a marché. Pour tout ce que les outils dédiés ne couvrent pas, run_command avec PowerShell fait le reste (Wi-Fi, réglages, planificateur, registre, Office via COM…).
+
+# Piloter une interface graphique
+Boucle : (1) open / focus_window ; (2) look_at_screen avec une question précise (« où est le champ de recherche ? ») — de préférence avec window_title pour cadrer ; (3) click aux coordonnées données, ou send_keys si un raccourci clavier fait l'affaire (plus fiable : Ctrl+L pour une barre d'adresse, Ctrl+S, {ENTER}, {TAB}…) ; (4) look_at_screen à nouveau pour vérifier le résultat avant l'étape suivante. Ne clique jamais à l'aveugle : regarde d'abord. Si un élément n'est pas visible, fais défiler (scroll) ou agrandis la fenêtre (window_action maximize). Privilégie toujours une commande PowerShell ou un réglage direct quand ça existe (plus sûr qu'une suite de clics). Pour tout ce que les outils dédiés ne couvrent pas, run_command fait le reste (Wi-Fi, réglages, planificateur, registre, Office via COM…).
 
 # Méthode (comme un excellent ingénieur)
 1. Comprends la demande ; si elle est ambiguë sur un point qui change tout, pose UNE question courte, sinon avance.

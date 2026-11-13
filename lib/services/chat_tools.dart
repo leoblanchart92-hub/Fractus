@@ -17,6 +17,7 @@ import '../core/layout.dart';
 import '../core/models.dart';
 import '../core/state.dart';
 import '../island/controller.dart';
+import 'screen_tools.dart';
 
 class ChatTools {
   ChatTools(this.state, {required this.controller});
@@ -25,6 +26,9 @@ class ChatTools {
 
   /// Dossier de travail imposé dans les réglages (vide = projet en avant, sinon le profil).
   String workspace = '';
+
+  /// Les yeux : décrit une image JPEG (posé par ChatService, qui connaît Groq).
+  Future<String> Function(List<int> jpeg, String prompt)? vision;
 
   static const String sessionId = 'fractus';
   static const int maxCommandOutput = 30 * 1024;
@@ -108,6 +112,34 @@ class ChatTools {
         _tool('power', 'Verrouille, met en veille, redémarre ou éteint le PC. Demande la permission.', {
           'action': {'type': 'string', 'enum': ['lock', 'sleep', 'restart', 'shutdown'], 'description': 'Action.'},
         }, required: ['action']),
+        // ── Les yeux et la souris ──
+        _tool('look_at_screen', 'Regarde l\'écran (ou une fenêtre / région) : description, texte visible, éléments cliquables avec leurs coordonnées écran (x, y). À utiliser avant de cliquer et pour vérifier le résultat d\'une action. Demande la permission.', {
+          'question': {'type': 'string', 'description': 'Ce que tu cherches (ex. "où est le bouton Enregistrer ?").'},
+          'window_title': {'type': 'string', 'description': 'Limiter à la fenêtre dont le titre contient ceci (plus précis).'},
+          'x': {'type': 'integer'}, 'y': {'type': 'integer'}, 'width': {'type': 'integer'}, 'height': {'type': 'integer'},
+        }),
+        _tool('click', 'Clique à des coordonnées écran (obtenues via look_at_screen ou list_windows). Demande la permission.', {
+          'x': {'type': 'integer'}, 'y': {'type': 'integer'},
+          'button': {'type': 'string', 'enum': ['left', 'right', 'middle'], 'description': 'left par défaut.'},
+          'double': {'type': 'boolean', 'description': 'Double-clic.'},
+        }, required: ['x', 'y']),
+        _tool('move_mouse', 'Déplace le pointeur (survol, menus). Demande la permission.', {
+          'x': {'type': 'integer'}, 'y': {'type': 'integer'},
+        }, required: ['x', 'y']),
+        _tool('scroll', 'Molette à une position : amount en crans, positif = vers le haut (ou vers la gauche si horizontal). Demande la permission.', {
+          'x': {'type': 'integer'}, 'y': {'type': 'integer'},
+          'amount': {'type': 'integer'},
+          'horizontal': {'type': 'boolean'},
+        }, required: ['x', 'y', 'amount']),
+        _tool('drag', 'Glisser-déposer du point 1 au point 2 (bouton gauche). Demande la permission.', {
+          'x1': {'type': 'integer'}, 'y1': {'type': 'integer'}, 'x2': {'type': 'integer'}, 'y2': {'type': 'integer'},
+        }, required: ['x1', 'y1', 'x2', 'y2']),
+        _tool('get_mouse_position', 'Position actuelle du pointeur.', {}),
+        _tool('window_action', 'Agit sur une fenêtre (titre contient / PID) : minimize, maximize, restore, close, ou move avec x, y, width, height. Demande la permission.', {
+          'title': {'type': 'string'}, 'pid': {'type': 'integer'},
+          'action': {'type': 'string', 'enum': ['minimize', 'maximize', 'restore', 'close', 'move']},
+          'x': {'type': 'integer'}, 'y': {'type': 'integer'}, 'width': {'type': 'integer'}, 'height': {'type': 'integer'},
+        }, required: ['action']),
       ];
 
   Map<String, dynamic> _tool(String name, String description, Map<String, dynamic> props, {List<String> required = const []}) {
@@ -166,6 +198,20 @@ class ChatTools {
         return 'règle le volume';
       case 'power':
         return '${args['action']} le PC';
+      case 'look_at_screen':
+        return args['window_title'] != null ? 'regarde ${args['window_title']}' : 'regarde l\'écran';
+      case 'click':
+        return '${args['double'] == true ? 'double-clique' : (args['button'] == 'right' ? 'clic droit' : 'clique')} en (${args['x']}, ${args['y']})';
+      case 'move_mouse':
+        return 'déplace la souris';
+      case 'scroll':
+        return 'fait défiler';
+      case 'drag':
+        return 'glisse-dépose';
+      case 'get_mouse_position':
+        return 'regarde la souris';
+      case 'window_action':
+        return '${args['action']} ${args['title'] ?? args['pid'] ?? ''}';
       default:
         return name;
     }
@@ -212,7 +258,7 @@ class ChatTools {
         case 'kill_process':
           return await _killProcess(args);
         case 'list_windows':
-          return await _ps(_windowsScript);
+          return await _ps(psWindows);
         case 'focus_window':
           return await _focusWindow(args);
         case 'send_keys':
@@ -230,6 +276,23 @@ class ChatTools {
           return await _setVolume(args);
         case 'power':
           return await _power(args);
+        case 'look_at_screen':
+          return await _lookAtScreen(args);
+        case 'click':
+          return await _click(args);
+        case 'move_mouse':
+          return await _gated('Fractus', {'action': 'Déplacer la souris', 'target': '(${_i(args['x'])}, ${_i(args['y'])})'},
+              () => _ps(psMoveMouse(_i(args['x']), _i(args['y']))));
+        case 'scroll':
+          return await _gated('Fractus', {'action': 'Faire défiler', 'target': '${_i(args['amount'])} crans en (${_i(args['x'])}, ${_i(args['y'])})'},
+              () => _ps(psScroll(_i(args['x']), _i(args['y']), _i(args['amount']), horizontal: args['horizontal'] == true)));
+        case 'drag':
+          return await _gated('Fractus', {'action': 'Glisser-déposer', 'target': '(${_i(args['x1'])}, ${_i(args['y1'])}) → (${_i(args['x2'])}, ${_i(args['y2'])})'},
+              () => _ps(psDrag(_i(args['x1']), _i(args['y1']), _i(args['x2']), _i(args['y2']))));
+        case 'get_mouse_position':
+          return await _ps(psMousePosition);
+        case 'window_action':
+          return await _windowAction(args);
         default:
           return jsonEncode({'error': 'Outil inconnu : $name'});
       }
@@ -279,8 +342,8 @@ class ChatTools {
     final kind = switch (name) {
       'read_file' || 'list_directory' || 'get_sessions' => StepKind.read,
       'write_file' || 'edit_file' => StepKind.edit,
-      'run_command' || 'open' || 'kill_process' || 'focus_window' || 'send_keys' || 'power' || 'set_volume' || 'screenshot' => StepKind.run,
-      'search_text' || 'fetch_url' || 'list_windows' || 'list_processes' || 'system_info' => StepKind.search,
+      'run_command' || 'open' || 'kill_process' || 'focus_window' || 'send_keys' || 'power' || 'set_volume' || 'screenshot' || 'click' || 'move_mouse' || 'scroll' || 'drag' || 'window_action' => StepKind.run,
+      'search_text' || 'fetch_url' || 'list_windows' || 'list_processes' || 'system_info' || 'look_at_screen' || 'get_mouse_position' => StepKind.search,
       _ => StepKind.note,
     };
     s.addStep(SessionStep(kind, describe(name, args)));
@@ -636,6 +699,88 @@ function Tap(\$k) { \$c::keybd_event(\$k, 0, 0, [UIntPtr]::Zero); \$c::keybd_eve
     return _gated('Fractus', {'action': '$label le PC'}, () => _ps('$cmd; \'{"ok":true}\''));
   }
 
+  static int _i(Object? v) => v is num ? v.round() : (int.tryParse('$v') ?? 0);
+
+  Future<String> _click(Map<String, dynamic> args) async {
+    final x = _i(args['x']);
+    final y = _i(args['y']);
+    final button = (args['button'] ?? 'left').toString();
+    final dbl = args['double'] == true;
+    final label = dbl ? 'Double-cliquer' : (button == 'right' ? 'Clic droit' : (button == 'middle' ? 'Clic molette' : 'Cliquer'));
+    return _gated('Fractus', {'action': label, 'target': '($x, $y)'}, () => _ps(psClick(x, y, button: button, clicks: dbl ? 2 : 1)));
+  }
+
+  Future<String> _windowAction(Map<String, dynamic> args) async {
+    final action = (args['action'] ?? '').toString();
+    final title = (args['title'] ?? '').toString().trim();
+    final pid = args['pid'] is num ? (args['pid'] as num).toInt() : null;
+    if (title.isEmpty && pid == null) return jsonEncode({'error': 'Donne un title ou un pid.'});
+    const labels = {'minimize': 'Réduire', 'maximize': 'Agrandir', 'restore': 'Restaurer', 'close': 'Fermer', 'move': 'Déplacer / redimensionner'};
+    final label = labels[action];
+    if (label == null) return jsonEncode({'error': 'Action inconnue : $action'});
+    return _gated('Fractus', {'action': '$label la fenêtre', 'target': title.isNotEmpty ? title : 'PID $pid'}, () {
+      return _ps(psWindowAction(
+        psSelectWindow(title: title.isNotEmpty ? title : null, pid: pid),
+        action,
+        x: args['x'] is num ? _i(args['x']) : null,
+        y: args['y'] is num ? _i(args['y']) : null,
+        width: args['width'] is num ? _i(args['width']) : null,
+        height: args['height'] is num ? _i(args['height']) : null,
+      ));
+    });
+  }
+
+  /// Capture + modèle vision : ce qu'il y a à l'écran, et où.
+  Future<String> _lookAtScreen(Map<String, dynamic> args) async {
+    if (vision == null) return jsonEncode({'error': 'Vision indisponible.'});
+    final question = (args['question'] ?? '').toString().trim();
+    final windowTitle = (args['window_title'] ?? '').toString().trim();
+    int? x, y, w, h;
+    if (args['x'] is num && args['y'] is num && args['width'] is num && args['height'] is num) {
+      x = _i(args['x']);
+      y = _i(args['y']);
+      w = _i(args['width']);
+      h = _i(args['height']);
+    }
+    final target = windowTitle.isNotEmpty ? 'fenêtre « $windowTitle »' : (x != null ? 'région ($x, $y, $w×$h)' : 'tout l\'écran');
+    return _gated('Fractus', {'action': 'Regarder l\'écran', 'target': target}, () async {
+      if (windowTitle.isNotEmpty) {
+        // La fenêtre d'abord au premier plan, puis son rectangle.
+        final js = await _ps(psWindowAction(psSelectWindow(title: windowTitle), 'restore'));
+        try {
+          final j = jsonDecode(js);
+          if (j is Map && j['ok'] == true) {
+            x = _i(j['x']);
+            y = _i(j['y']);
+            w = _i(j['width']);
+            h = _i(j['height']);
+          } else {
+            return jsonEncode({'error': 'Fenêtre introuvable : $windowTitle'});
+          }
+        } catch (_) {}
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+      }
+      final path = '${Directory.systemTemp.path}${Platform.pathSeparator}fractus-look.jpg';
+      final out = await _ps(psScreenshot(path: path, x: x, y: y, width: w, height: h));
+      final shot = await readShot(out);
+      if (shot == null) return out.startsWith('{') ? out : jsonEncode({'error': 'Capture impossible : $out'});
+      final m = shot.meta;
+      final prompt = '''
+Capture de l'écran Windows de l'utilisateur. Zone capturée : origine (${m['x']}, ${m['y']}), taille ${m['width']}×${m['height']} px (coordonnées écran). Une grille est dessinée tous les 100 px ; les nombres en haut sont les X écran, ceux à gauche les Y écran : sers-t'en pour donner des coordonnées exactes.
+${question.isNotEmpty ? 'Question : $question' : 'Décris ce qui est à l\'écran.'}
+Réponds en français, de façon compacte :
+1) En une ou deux phrases : quelle application / page est visible, et son état (dialogue ouvert ? erreur ?).
+2) Les éléments interactifs pertinents (boutons, champs, menus, onglets, liens, icônes) sous la forme « nom — (x, y) » avec le centre en coordonnées écran lues sur la grille. Priorité à ceux qui répondent à la question.
+3) Le texte important visible (titres, messages, valeurs). Si quelque chose demandé n'est pas visible, dis-le clairement.''';
+      try {
+        final text = await vision!(shot.bytes, prompt);
+        return jsonEncode({'ok': true, 'region': {'x': m['x'], 'y': m['y'], 'width': m['width'], 'height': m['height']}, 'description': text});
+      } catch (e) {
+        return jsonEncode({'error': 'Vision : ${e.toString().replaceFirst('Exception: ', '')}'});
+      }
+    });
+  }
+
   static const String _systemInfoScript = '''
 \$os = Get-CimInstance Win32_OperatingSystem
 \$cs = Get-CimInstance Win32_ComputerSystem
@@ -660,11 +805,6 @@ Get-Process | Where-Object { ${filter.isEmpty ? '\$true' : '\$_.ProcessName -lik
   Sort-Object WorkingSet64 -Descending | Select-Object -First 60 |
   ForEach-Object { @{ name=\$_.ProcessName; pid=\$_.Id; mem_mb=[math]::Round(\$_.WorkingSet64/1MB); title=\$_.MainWindowTitle } } |
   ConvertTo-Json -Compress
-''';
-
-  static const String _windowsScript = '''
-Get-Process | Where-Object { \$_.MainWindowHandle -ne 0 -and \$_.MainWindowTitle } |
-  ForEach-Object { @{ title=\$_.MainWindowTitle; process=\$_.ProcessName; pid=\$_.Id } } | ConvertTo-Json -Compress
 ''';
 
   // ── Fichiers ─────────────────────────────────────────────────────────────

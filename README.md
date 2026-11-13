@@ -39,8 +39,10 @@ lui, s'appelle **Fractus** : un petit cristal aux grands yeux.
   **Groq** (gratuite) : le modèle le plus capable du compte choisi automatiquement (gpt-oss-120b, Kimi K2,
   Llama 3.3 70B…), raisonnement au maximum, réponses en streaming. Ses outils : **fichiers et code**
   (lire, chercher, écrire, modifier, PowerShell, URL) et **le PC** (ouvrir des applis/fichiers/URL,
-  fenêtres au premier plan, clavier, processus, presse-papiers, capture d'écran, volume, notifications,
-  verrouiller / veille / redémarrer / éteindre). Chaque action passe par la carte
+  fenêtres, clavier, processus, presse-papiers, capture d'écran, volume, notifications,
+  verrouiller / veille / redémarrer / éteindre) — et depuis la 0.5, **il voit l'écran et clique** :
+  `look_at_screen` envoie une capture (avec une grille de coordonnées) à un modèle vision de Groq qui lui
+  dit ce qui est affiché et où, puis `click` / `scroll` / `drag` font le reste. Chaque action passe par la carte
   **Autoriser / Refuser / Toujours** de l'île ; son travail apparaît comme la session « Fractus ».
 - 🌌 **Thème Aurora** — noir bleuté profond, surfaces teintées, accent cyan → violet en dégradé sur les
   boutons et en lueur diffuse derrière les cartes.
@@ -87,7 +89,8 @@ Ce que l'agent peut faire pendant le chat :
 | `write_file`, `edit_file` | carte **Autoriser / Refuser / Toujours** |
 | `run_command` (PowerShell, dans le dossier de travail) | carte, « Toujours » par première commande (`git`, `npm`…) |
 | `fetch_url` | carte |
-| `open`, `focus_window`, `send_keys`, `kill_process`, `clipboard_get`, `clipboard_set`, `screenshot`, `set_volume`, `power` | carte « Fractus veut agir sur ton PC », « Toujours » par type d'action |
+| `open`, `focus_window`, `window_action`, `send_keys`, `kill_process`, `clipboard_get`, `clipboard_set`, `screenshot`, `set_volume`, `power` | carte « Fractus veut agir sur ton PC », « Toujours » par type d'action |
+| `look_at_screen` (capture + modèle vision Llama 4 : description et coordonnées des éléments), `click`, `move_mouse`, `scroll`, `drag` | carte, « Toujours » par type d'action (`get_mouse_position` : libre) |
 
 Le dossier de travail se règle dans Réglages → Chat (vide = projet de l'agent en avant, sinon votre
 profil). Fractus n'approuve jamais une permission d'un autre agent : ça reste un clic humain.
