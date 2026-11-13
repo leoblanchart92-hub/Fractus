@@ -31,10 +31,17 @@ Future<void> main() async {
   final window = WindowService(state, controller);
   final hooks = HookServer(controller);
   final demo = Demo(controller);
-  final chat = ChatService(apiKey: settings.anthropicApiKey, model: settings.chatModel);
+  final chat = ChatService(
+    apiKey: settings.chatApiKey,
+    model: settings.chatModel,
+    provider: ChatProviderInfo.parse(settings.chatProvider),
+    baseUrl: settings.chatBaseUrl,
+  );
   state.addListener(() {
-    chat.apiKey = state.settings.anthropicApiKey;
+    chat.apiKey = state.settings.chatApiKey;
     chat.model = state.settings.chatModel;
+    chat.provider = ChatProviderInfo.parse(state.settings.chatProvider);
+    chat.baseUrl = state.settings.chatBaseUrl;
   });
   final startup = StartupService();
   final updates = UpdateService(autoCheck: settings.autoUpdate);

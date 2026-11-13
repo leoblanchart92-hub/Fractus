@@ -35,7 +35,8 @@ lui, s'appelle **Fractus** : un petit cristal aux grands yeux.
   Toujours** ; `AskUserQuestion` montre ses choix (jusqu'à 4 questions, sélection multiple).
   Jamais rien d'autorisé sans un clic ; sans réponse, le terminal reprend la main.
 - 🎉 **Terminé / erreur** — Fractus fait sa roulade, la carte verte résume la réponse.
-- 💬 **Chat** — avec Claude via votre propre clé Anthropic (Réglages → Chat), qui voit vos sessions en cours.
+- 💬 **Chat** — avec votre propre clé **Groq** (par défaut), OpenAI/compatible (Mistral, Ollama…) ou
+  Anthropic (Réglages → Chat) ; le modèle voit vos sessions en cours.
 - ⚙️ **Réglages dans l'île** — survol, son, lancement avec Windows, port des hooks, clé API, mises à jour, démo, quitter.
 - 🫥 **En arrière-plan** — pas de fenêtre dans la barre des tâches : une icône dans la zone de
   notification (clic gauche : ouvrir l'île ; clic droit : réglages, mises à jour, quitter) et, par
@@ -58,10 +59,20 @@ Release avec l'installateur, que les Fractus déjà installés proposeront d'ins
 
 ## La clé API (chat)
 
-Le chat utilise votre propre clé Anthropic. Ouvrez l'île → ⚙️ **Réglages** → section **Chat** →
-collez la clé (`sk-ant-…`) → **Enregistrer**. Elle est écrite dans
-`%APPDATA%\fractus\settings.json` (champ `anthropicApiKey`) et ne quitte la machine que vers
-`api.anthropic.com` quand vous envoyez un message. Vous pouvez aussi éditer ce fichier à la main.
+Le chat utilise votre propre clé. Ouvrez l'île → ⚙️ **Réglages** → section **Chat** :
+
+1. choisissez le fournisseur : **Groq** (par défaut, clé gratuite sur [console.groq.com](https://console.groq.com/keys)),
+   **OpenAI / compatible** (OpenAI, Mistral, Ollama en local… avec une URL de base au choix) ou **Anthropic** ;
+2. collez la clé (`gsk_…` pour Groq) ; le modèle est facultatif (`llama-3.3-70b-versatile` par défaut chez Groq) ;
+3. **Enregistrer**.
+
+Elle est écrite dans `%APPDATA%\fractus\settings.json` (champs `chatProvider`, `chatApiKey`,
+`chatModel`, `chatBaseUrl`) et ne quitte la machine que vers le fournisseur choisi, quand vous envoyez
+un message. Vous pouvez aussi éditer ce fichier à la main :
+
+```json
+{ "chatProvider": "groq", "chatApiKey": "gsk_xxxxxxxx", "chatModel": "" }
+```
 
 ## Construire et lancer (Windows)
 

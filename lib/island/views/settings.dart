@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/state.dart';
 import '../../core/theme.dart';
+import '../../services/chat_service.dart';
 import '../../services/update_service.dart';
 import '../controller.dart';
 import '../widgets.dart';
@@ -37,8 +38,11 @@ class SettingsView extends StatefulWidget {
 }
 
 class _SettingsViewState extends State<SettingsView> {
-  late final TextEditingController _key = TextEditingController(text: widget.state.settings.anthropicApiKey);
+  late final TextEditingController _key = TextEditingController(text: widget.state.settings.chatApiKey);
   late final TextEditingController _model = TextEditingController(text: widget.state.settings.chatModel);
+  late final TextEditingController _baseUrl = TextEditingController(text: widget.state.settings.chatBaseUrl);
+  late ChatProvider _provider = ChatProviderInfo.parse(widget.state.settings.chatProvider);
+  bool _savedChat = false;
   late final TextEditingController _port = TextEditingController(text: widget.state.settings.hookPort.toString());
   bool _copied = false;
 
@@ -46,6 +50,7 @@ class _SettingsViewState extends State<SettingsView> {
   void dispose() {
     _key.dispose();
     _model.dispose();
+    _baseUrl.dispose();
     _port.dispose();
     super.dispose();
   }
@@ -152,23 +157,42 @@ class _SettingsViewState extends State<SettingsView> {
             _section('Chat'),
             Row(
               children: [
-                Expanded(flex: 3, child: _field(_key, hint: 'Clé API Anthropic (sk-ant-…)', obscure: true)),
+                for (final p in ChatProvider.values) ...[
+                  _chip(p.label, _provider == p, () => setState(() => _provider = p)),
+                  const SizedBox(width: 6),
+                ],
+                const Spacer(),
+                if (_provider == ChatProvider.groq)
+                  Text('Clé gratuite sur console.groq.com', style: ui(11, color: Palette.dim3)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(flex: 3, child: _field(_key, hint: _provider.keyHint, obscure: true)),
                 const SizedBox(width: 6),
-                Expanded(flex: 2, child: _field(_model, hint: 'Modèle')),
+                Expanded(flex: 2, child: _field(_model, hint: 'Modèle (${_provider.defaultModel})')),
                 const SizedBox(width: 6),
                 IslandButton(
-                  label: 'Enregistrer',
+                  label: _savedChat ? 'Enregistré' : 'Enregistrer',
                   compact: true,
                   primary: true,
                   onTap: () {
-                    s.anthropicApiKey = _key.text.trim();
-                    if (_model.text.trim().isNotEmpty) s.chatModel = _model.text.trim();
+                    s.chatProvider = _provider.name;
+                    s.chatApiKey = _key.text.trim();
+                    s.chatModel = _model.text.trim();
+                    s.chatBaseUrl = _provider == ChatProvider.openai ? _baseUrl.text.trim() : '';
                     widget.state.saveSettingsSoon();
+                    setState(() => _savedChat = true);
                   },
                 ),
               ],
             ),
-            Text('La clé reste sur cette machine (settings.json). Rien n\'est envoyé sans ton message.',
+            if (_provider == ChatProvider.openai) ...[
+              const SizedBox(height: 4),
+              _field(_baseUrl, hint: 'URL de base (vide = https://api.openai.com/v1 ; Ollama : http://localhost:11434/v1)'),
+            ],
+            Text('La clé reste sur cette machine (%APPDATA%\\fractus\\settings.json). Rien n\'est envoyé sans ton message.',
                 style: ui(11, color: Palette.dim3)),
             _section('Mises à jour'),
             _toggle('Chercher les mises à jour automatiquement', s.autoUpdate, (v) {
@@ -226,6 +250,26 @@ class _SettingsViewState extends State<SettingsView> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _chip(String label, bool on, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          height: 22,
+          padding: const EdgeInsets.symmetric(horizontal: 9),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: on ? Palette.ink : Palette.tabOn,
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Text(label, style: ui(11.5, weight: FontWeight.w600, color: on ? const Color(0xFF111214) : Palette.dim)),
         ),
       ),
     );

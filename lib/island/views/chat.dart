@@ -96,8 +96,8 @@ class _ChatViewState extends State<ChatView> {
                       padding: const EdgeInsets.only(bottom: 8, left: 6),
                       child: Text(
                         widget.chat.configured
-                            ? 'Pose une question à Claude : il voit tes sessions en cours.'
-                            : 'Ajoute ta clé Anthropic dans les réglages pour parler à Claude.',
+                            ? 'Pose une question à ${widget.chat.provider.assistantName} : il voit tes sessions en cours.'
+                            : 'Ajoute ta clé ${widget.chat.provider.label} dans les réglages pour discuter.',
                         style: ui(12, color: Palette.dim3),
                       ),
                     ),
@@ -188,7 +188,7 @@ class _Field extends StatelessWidget {
                 decoration: InputDecoration(
                   isDense: true,
                   border: InputBorder.none,
-                  hintText: 'Écris à Claude…',
+                  hintText: 'Écris à Fractus…',
                   hintStyle: ui(13, color: Palette.dim3),
                 ),
                 textInputAction: TextInputAction.send,

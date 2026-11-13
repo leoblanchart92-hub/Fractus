@@ -14,9 +14,14 @@ class Settings {
   bool muted = false;
   /// Port local du serveur de hooks (l'agent y poste ses événements).
   int hookPort = 7788;
-  /// Clé Anthropic pour le chat (vide = chat désactivé).
-  String anthropicApiKey = '';
-  String chatModel = 'claude-sonnet-4-5';
+  /// Fournisseur du chat : groq (défaut), openai (ou compatible), anthropic.
+  String chatProvider = 'groq';
+  /// Clé API du fournisseur choisi (vide = chat désactivé).
+  String chatApiKey = '';
+  /// Modèle (vide = celui proposé par défaut pour le fournisseur).
+  String chatModel = '';
+  /// URL de base personnalisée pour un serveur compatible OpenAI (vide = officielle).
+  String chatBaseUrl = '';
   /// Permissions « Toujours autoriser » : "tool|commande" → vrai.
   Set<String> alwaysAllow = {};
   /// Saluer (coucou de la main) au lancement.
@@ -30,8 +35,10 @@ class Settings {
         'openOnHover': openOnHover,
         'muted': muted,
         'hookPort': hookPort,
-        'anthropicApiKey': anthropicApiKey,
+        'chatProvider': chatProvider,
+        'chatApiKey': chatApiKey,
         'chatModel': chatModel,
+        'chatBaseUrl': chatBaseUrl,
         'alwaysAllow': alwaysAllow.toList(),
         'greetOnLaunch': greetOnLaunch,
         'launchAtStartup': launchAtStartup,
@@ -43,8 +50,16 @@ class Settings {
     s.openOnHover = j['openOnHover'] == true;
     s.muted = j['muted'] == true;
     s.hookPort = (j['hookPort'] is int) ? j['hookPort'] as int : 7788;
-    s.anthropicApiKey = (j['anthropicApiKey'] ?? '') as String;
-    s.chatModel = (j['chatModel'] ?? 'claude-sonnet-4-5') as String;
+    s.chatProvider = (j['chatProvider'] ?? 'groq') as String;
+    s.chatApiKey = (j['chatApiKey'] ?? '') as String;
+    s.chatModel = (j['chatModel'] ?? '') as String;
+    s.chatBaseUrl = (j['chatBaseUrl'] ?? '') as String;
+    // Anciens réglages (clé Anthropic seule) : on bascule sur Anthropic.
+    final legacy = (j['anthropicApiKey'] ?? '') as String;
+    if (s.chatApiKey.isEmpty && legacy.isNotEmpty) {
+      s.chatApiKey = legacy;
+      s.chatProvider = 'anthropic';
+    }
     final aa = j['alwaysAllow'];
     if (aa is List) s.alwaysAllow = aa.whereType<String>().toSet();
     s.greetOnLaunch = j['greetOnLaunch'] != false;
