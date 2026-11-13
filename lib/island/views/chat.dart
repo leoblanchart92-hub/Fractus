@@ -55,19 +55,16 @@ class _ChatViewState extends State<ChatView> {
     widget.state.chatBusy = true;
     widget.state.touch();
     _scrollDown();
-    var streamed = false;
     try {
       final text = await widget.chat.send(
         widget.state.chat.where((m) => !identical(m, reply)).toList(),
         onDelta: (partial) {
-          streamed = true;
           reply.text = partial;
           widget.state.touch();
           _scrollDown();
         },
         onStatus: (status) {
           // Entre deux tours, on montre l'outil en cours ; le prochain texte le remplacera.
-          streamed = false;
           reply.text = '⟡ $status…';
           widget.state.touch();
         },
