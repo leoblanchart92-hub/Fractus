@@ -159,9 +159,10 @@ class FractusApp extends StatelessWidget {
           hookPort: () => hooks.port,
           hookError: () => hooks.error,
           onDemo: () {
-            demo.start();
-            controller.open(state.defaultView());
+            demo.toggle();
+            if (demo.running) controller.open(state.defaultView());
           },
+          demoRunning: () => demo.running,
           onQuit: onQuit,
           onRestartHooks: () async {
             await hooks.start(state.settings.hookPort);

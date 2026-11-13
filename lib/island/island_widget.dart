@@ -35,6 +35,7 @@ class IslandWidget extends StatefulWidget {
     required this.onRestartHooks,
     required this.updates,
     required this.onStartupChanged,
+    required this.demoRunning,
   });
 
   final AppState state;
@@ -47,6 +48,7 @@ class IslandWidget extends StatefulWidget {
   final VoidCallback onRestartHooks;
   final UpdateService updates;
   final ValueChanged<bool> onStartupChanged;
+  final bool Function() demoRunning;
 
   @override
   State<IslandWidget> createState() => _IslandWidgetState();
@@ -272,7 +274,12 @@ class _IslandWidgetState extends State<IslandWidget> {
             onTap: () => state.setView(IslandView.prompt),
           ),
           const SizedBox(width: 8),
-          HeaderTab(icon: Icons.add_rounded, tooltip: 'Jouer la démo', size: 17, onTap: widget.onDemo),
+          HeaderTab(
+            icon: widget.demoRunning() ? Icons.stop_rounded : Icons.add_rounded,
+            tooltip: widget.demoRunning() ? 'Arrêter la démo (sessions fictives)' : 'Jouer la démo (4 projets fictifs)',
+            size: 17,
+            onTap: widget.onDemo,
+          ),
           const Spacer(),
           if (running > 0) ...[
             Text('$running en cours', style: ui(12, color: Palette.dim2)),
@@ -336,6 +343,7 @@ class _IslandWidgetState extends State<IslandWidget> {
           updates: widget.updates,
           onStartupChanged: widget.onStartupChanged,
           chat: widget.chat,
+          demoRunning: widget.demoRunning(),
         );
       case IslandView.update:
         return UpdateView(

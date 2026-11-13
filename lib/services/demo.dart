@@ -4,6 +4,7 @@
 
 import 'dart:async';
 
+import '../core/layout.dart';
 import '../island/controller.dart';
 
 class Demo {
@@ -12,6 +13,9 @@ class Demo {
   final IslandController controller;
   final List<Timer> _timers = [];
   bool running = false;
+
+  /// Les identifiants des sessions fictives, pour les retirer à l'arrêt.
+  static const Set<String> sessionIds = {'korus', 'sbe', 'brief', 'ig'};
 
   void _at(int ms, void Function() fn) {
     _timers.add(Timer(Duration(milliseconds: ms), fn));
@@ -30,6 +34,26 @@ class Demo {
     }
     _timers.clear();
     running = false;
+    // Les demandes fictives encore en attente rendent la main, puis tout disparaît.
+    final st = controller.state;
+    for (final a in [...st.approvalQueue, if (st.pendingApproval != null) st.pendingApproval!]) {
+      if (sessionIds.contains(a.sessionId)) controller.expire(a.requestId);
+    }
+    for (final id in sessionIds) {
+      st.removeSession(id);
+    }
+    if (st.focusedId != null && sessionIds.contains(st.focusedId)) st.focus(null);
+    if (st.view != IslandView.settings && st.view != IslandView.prompt) st.setView(st.defaultView());
+    st.touch();
+  }
+
+  /// Démarre, ou arrête si elle tourne déjà.
+  void toggle() {
+    if (running) {
+      stop();
+    } else {
+      start();
+    }
   }
 
   void start() {

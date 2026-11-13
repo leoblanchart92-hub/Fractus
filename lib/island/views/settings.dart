@@ -23,6 +23,7 @@ class SettingsView extends StatefulWidget {
     required this.updates,
     required this.onStartupChanged,
     required this.chat,
+    required this.demoRunning,
   });
   final AppState state;
   final IslandController controller;
@@ -34,6 +35,7 @@ class SettingsView extends StatefulWidget {
   final UpdateService updates;
   final ValueChanged<bool> onStartupChanged;
   final ChatService chat;
+  final bool demoRunning;
 
   @override
   State<SettingsView> createState() => _SettingsViewState();
@@ -248,7 +250,7 @@ class _SettingsViewState extends State<SettingsView> {
             _section('Fractus'),
             Row(
               children: [
-                IslandButton(label: 'Jouer la démo', compact: true, onTap: widget.onDemo),
+                IslandButton(label: widget.demoRunning ? 'Arrêter la démo' : 'Jouer la démo', compact: true, onTap: widget.onDemo),
                 const SizedBox(width: 8),
                 IslandButton(label: 'Quitter Fractus', compact: true, onTap: widget.onQuit),
                 const Spacer(),

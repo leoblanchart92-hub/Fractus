@@ -333,7 +333,7 @@ class EmptyView extends StatelessWidget {
           Text(
             hookPort == null
                 ? 'Le serveur de hooks n\'a pas pu démarrer : vois les réglages.'
-                : 'Lance Claude Code avec le hook Fractus (port $hookPort), ou regarde la démo.',
+                : 'Lance Claude Code avec le hook Fractus (port $hookPort), ou regarde la démo (4 projets fictifs).',
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: ui(12.5, color: Palette.dim),
