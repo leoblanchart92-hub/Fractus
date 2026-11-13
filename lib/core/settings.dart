@@ -20,6 +20,8 @@ class Settings {
   String chatModel = '';
   /// Recherche web et exécution de code côté Groq (modèle groq/compound).
   bool chatWebSearch = false;
+  /// Dossier de travail de l'agent Fractus (vide = projet de l'agent en avant, sinon le profil).
+  String chatWorkspace = '';
   /// Permissions « Toujours autoriser » : "tool|commande" → vrai.
   Set<String> alwaysAllow = {};
   /// Saluer (coucou de la main) au lancement.
@@ -36,6 +38,7 @@ class Settings {
         'chatApiKey': chatApiKey,
         'chatModel': chatModel,
         'chatWebSearch': chatWebSearch,
+        'chatWorkspace': chatWorkspace,
         'alwaysAllow': alwaysAllow.toList(),
         'greetOnLaunch': greetOnLaunch,
         'launchAtStartup': launchAtStartup,
@@ -54,6 +57,7 @@ class Settings {
     final m = (j['chatModel'] ?? '') as String;
     s.chatModel = (m.startsWith('claude') || m.startsWith('gpt-4') || m.startsWith('gpt-5')) ? '' : m;
     s.chatWebSearch = j['chatWebSearch'] == true;
+    s.chatWorkspace = (j['chatWorkspace'] ?? '') as String;
     final aa = j['alwaysAllow'];
     if (aa is List) s.alwaysAllow = aa.whereType<String>().toSet();
     s.greetOnLaunch = j['greetOnLaunch'] != false;

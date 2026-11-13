@@ -2,8 +2,8 @@
 //   - API compatible OpenAI : https://api.groq.com/openai/v1/chat/completions, en streaming (SSE)
 //   - le modèle le plus capable disponible sur le compte, choisi automatiquement
 //     (ou celui que vous fixez dans les réglages), raisonnement poussé au maximum
-//   - des outils locaux en lecture seule (sessions, fichiers, recherche) que le
-//     modèle appelle lui-même pour répondre avec le vrai contenu de vos projets
+//   - des outils locaux (lire, chercher, écrire, modifier, lancer des commandes)
+//     que le modèle appelle lui-même ; les actions passent par la carte de permission
 //   - en option, « groq/compound » : recherche web et exécution de code côté Groq
 // Rien n'est envoyé tant que vous n'avez pas tapé Entrée.
 
@@ -124,17 +124,47 @@ class ChatService {
   String _systemPrompt() {
     final now = DateTime.now();
     return '''
-Tu es Fractus, un compagnon IA d'élite qui vit dans une petite île en haut de l'écran Windows de l'utilisateur et veille sur ses agents de code (Claude Code, Codex, Cursor, Gemini CLI…).
+Tu es Fractus, un agent de code IA de haut niveau — l'équivalent de Claude Code ou de Codex — qui vit dans une petite île en haut de l'écran Windows de l'utilisateur et veille aussi sur ses autres agents (Claude Code, Codex, Cursor, Gemini CLI…).
 
-Ta mission : être extrêmement utile, précis et concret. Tu raisonnes à fond avant de répondre, tu vérifies plutôt que de supposer, tu vas au bout des problèmes (code, architecture, débogage, écriture, stratégie, maths…). Quand une question porte sur un projet, tu utilises tes outils pour lire les vrais fichiers avant de répondre, et tu cites les chemins et numéros de ligne. Tu proposes du code complet et correct, avec les commandes exactes.
+# Ce que tu sais faire
+Tu travailles directement sur la machine de l'utilisateur, dans le dossier de travail « ${tools.baseDir()} », avec des outils :
+- lecture libre : get_sessions, read_file, list_directory, search_text, get_datetime ;
+- actions : write_file, edit_file, run_command (PowerShell), fetch_url. Chacune affiche une carte Autoriser / Refuser à l'utilisateur ; s'il refuse, tu n'insistes pas, tu proposes autre chose.
+Tu ne dois jamais demander la permission par écrit dans ta réponse : appelle l'outil, la carte s'en charge.
 
-Outils (lecture seule, exécutés sur la machine de l'utilisateur) : get_sessions, read_file, list_directory, search_text, get_datetime. Tu ne peux ni écrire, ni exécuter de commande, ni approuver une permission : si l'utilisateur veut agir, explique-lui exactement quoi faire ou quoi dire à son agent. Les permissions en attente ne se décident que par un clic humain sur la carte.
+# Méthode (comme un excellent ingénieur)
+1. Comprends la demande ; si elle est ambiguë sur un point qui change tout, pose UNE question courte, sinon avance.
+2. Explore avant d'agir : list_directory, search_text, read_file (ne devine jamais le contenu d'un fichier).
+3. Planifie brièvement, puis agis par petites étapes vérifiables : edit_file pour les modifications ciblées, write_file pour les nouveaux fichiers.
+4. Vérifie : lance les tests / le build / la commande concernée avec run_command, lis la sortie, corrige, recommence jusqu'à ce que ça marche.
+5. Termine par un résumé court : ce qui a été fait (fichiers, commandes), ce qu'il reste à faire, comment vérifier.
 
-Style : français par défaut (ou la langue de l'utilisateur), direct, sans flatterie ni remplissage. La bulle est petite : va à l'essentiel en premier, puis développe si c'est utile. Markdown léger (listes, `code`). Si tu n'es pas sûr, dis-le et propose comment vérifier.
+# Règles
+- Windows + PowerShell : utilise les commandes PowerShell (Get-ChildItem, Select-String…), pas bash. Pas de commande interactive ni qui attend une saisie. Pas de commande destructrice large (rm -rf à la racine, format, suppression de .git) sans que l'utilisateur l'ait explicitement demandé.
+- Ne touche pas aux secrets (clés, tokens) sauf demande explicite ; ne les recopie pas dans tes réponses.
+- Code complet et correct, dans le style du projet ; pas de pseudo-code quand on attend du code.
+- Si un outil renvoie une erreur, lis-la et adapte-toi ; n'invente jamais un résultat d'outil.
+- Les permissions des AUTRES agents (Claude Code…) ne se décident que par un clic humain sur la carte : tu peux les décrire, pas les trancher.
+
+# Style
+Français par défaut (ou la langue de l'utilisateur). Direct, dense, sans flatterie ni remplissage. La bulle est petite : l'essentiel d'abord. Markdown léger (listes, `code`, chemins et numéros de ligne). Si tu n'es pas sûr, dis-le et vérifie avec un outil.
 
 Date et heure : ${now.toIso8601String()}.
 Sessions suivies par Fractus en ce moment :
 ${tools.sessionsSummary()}''';
+  }
+
+  /// Évite de dépasser le contexte : au-delà d'un budget de caractères, les
+  /// plus vieux résultats d'outils sont remplacés par un résumé.
+  void _prune(List<Map<String, dynamic>> messages) {
+    const budget = 320000;
+    int size() => messages.fold<int>(0, (n, m) => n + (m['content']?.toString().length ?? 0));
+    for (var i = 1; i < messages.length - 6 && size() > budget; i++) {
+      final m = messages[i];
+      if (m['role'] == 'tool' && (m['content']?.toString().length ?? 0) > 400) {
+        m['content'] = '[résultat ancien retiré pour faire de la place — relance l\'outil si besoin]';
+      }
+    }
   }
 
   /// Envoie la conversation. `onDelta` reçoit le texte complet de la réponse au
@@ -162,14 +192,19 @@ ${tools.sessionsSummary()}''';
 
     final useTools = !webSearch;
     var answer = '';
+    final lastUser = history.lastWhere((m) => m.role == 'user', orElse: () => ChatMessage('user', '')).text;
+    tools.begin(lastUser);
     try {
-      for (var round = 0; round < 6; round++) {
+      for (var round = 0; round < 40; round++) {
+        _prune(messages);
         final result = await _streamOnce(messages, useTools: useTools, onDelta: (t) {
           answer = t;
           onDelta?.call(t);
         });
         if (result.toolCalls.isEmpty) {
-          return result.content.trim().isEmpty ? answer.trim() : result.content.trim();
+          final text = result.content.trim().isEmpty ? answer.trim() : result.content.trim();
+          tools.end(text);
+          return text;
         }
         // Le modèle veut des informations : on exécute les outils, on lui rend la main.
         messages.add({
@@ -190,16 +225,22 @@ ${tools.sessionsSummary()}''';
             if (parsed is Map<String, dynamic>) args = parsed;
           } catch (_) {}
           onStatus?.call(tools.describe(c.name, args));
+          tools.step(c.name, args);
           final out = await tools.call(c.name, args);
           messages.add({'role': 'tool', 'tool_call_id': c.id, 'name': c.name, 'content': _clip(out, 48000)});
         }
       }
-      return answer.trim().isEmpty ? 'Je n\'ai pas réussi à conclure — reformule ou précise le fichier.' : answer.trim();
+      final text = answer.trim().isEmpty ? 'J\'ai atteint la limite d\'étapes pour cette réponse — dis-moi de continuer.' : answer.trim();
+      tools.end(text);
+      return text;
     } on TimeoutException {
+      tools.end('Groq ne répond pas.', error: true);
       return 'Groq ne répond pas (délai dépassé).';
     } catch (e) {
       final msg = e.toString().replaceFirst('Exception: ', '');
-      return answer.trim().isNotEmpty ? answer.trim() : 'Impossible de joindre Groq : $msg';
+      final text = answer.trim().isNotEmpty ? answer.trim() : 'Impossible de joindre Groq : $msg';
+      tools.end(text, error: answer.trim().isEmpty);
+      return text;
     }
   }
 

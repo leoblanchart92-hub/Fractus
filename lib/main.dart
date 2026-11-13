@@ -36,12 +36,13 @@ Future<void> main() async {
     apiKey: settings.chatApiKey,
     model: settings.chatModel,
     webSearch: settings.chatWebSearch,
-    tools: ChatTools(state),
+    tools: ChatTools(state, controller: controller)..workspace = settings.chatWorkspace,
   );
   state.addListener(() {
     chat.apiKey = state.settings.chatApiKey;
     chat.model = state.settings.chatModel;
     chat.webSearch = state.settings.chatWebSearch;
+    chat.tools.workspace = state.settings.chatWorkspace;
   });
   final startup = StartupService();
   final updates = UpdateService(autoCheck: settings.autoUpdate);

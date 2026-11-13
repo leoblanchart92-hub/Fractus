@@ -42,6 +42,7 @@ class SettingsView extends StatefulWidget {
 class _SettingsViewState extends State<SettingsView> {
   late final TextEditingController _key = TextEditingController(text: widget.state.settings.chatApiKey);
   late final TextEditingController _model = TextEditingController(text: widget.state.settings.chatModel);
+  late final TextEditingController _workspace = TextEditingController(text: widget.state.settings.chatWorkspace);
   bool _savedChat = false;
   bool _testing = false;
   String? _testResult;
@@ -53,6 +54,7 @@ class _SettingsViewState extends State<SettingsView> {
   void dispose() {
     _key.dispose();
     _model.dispose();
+    _workspace.dispose();
     _port.dispose();
     super.dispose();
   }
@@ -187,13 +189,15 @@ class _SettingsViewState extends State<SettingsView> {
                 _modelPicker(),
               ],
             ),
+            const SizedBox(height: 4),
+            _field(_workspace, hint: 'Dossier de travail de l\'agent (vide = projet de l\'agent en avant, sinon ton profil)'),
             _toggle('Recherche web et exécution de code (groq/compound)', s.chatWebSearch, (v) {
               s.chatWebSearch = v;
               widget.state.saveSettingsSoon();
             }),
             Text(
-              'Raisonnement poussé au maximum, outils de lecture de tes projets (fichiers, recherche, sessions). '
-              'La clé reste sur cette machine (%APPDATA%\\fractus\\settings.json) ; rien ne part sans ton message.',
+              'Fractus agit comme Claude Code : il lit, cherche, écrit, modifie et lance des commandes dans le dossier de travail — '
+              'chaque action passe par la carte Autoriser / Refuser / Toujours. La clé reste sur cette machine.',
               style: ui(11, color: Palette.dim3),
             ),
             _section('Mises à jour'),
@@ -261,6 +265,7 @@ class _SettingsViewState extends State<SettingsView> {
     final s = widget.state.settings;
     s.chatApiKey = _key.text.trim();
     s.chatModel = _model.text.trim();
+    s.chatWorkspace = _workspace.text.trim();
     widget.state.saveSettingsSoon();
     setState(() => _savedChat = true);
   }

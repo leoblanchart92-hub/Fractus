@@ -148,12 +148,25 @@ class _IslandWidgetState extends State<IslandWidget> {
                     height: h,
                     clipBehavior: Clip.antiAlias,
                     decoration: BoxDecoration(
-                      color: Colors.black,
+                      gradient: const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Palette.islandTop, Palette.islandBottom],
+                      ),
                       borderRadius: BorderRadius.vertical(bottom: Radius.circular(corner)),
+                      border: Border.all(color: Palette.accent2.withValues(alpha: 0.16)),
+                      boxShadow: [
+                        BoxShadow(color: Palette.accent.withValues(alpha: 0.10), blurRadius: 28, offset: const Offset(-6, 10)),
+                        BoxShadow(color: Palette.accent3.withValues(alpha: 0.10), blurRadius: 28, offset: const Offset(6, 10)),
+                        const BoxShadow(color: Color(0x66000000), blurRadius: 18, offset: Offset(0, 8)),
+                      ],
                     ),
                     child: Stack(
                       clipBehavior: Clip.hardEdge,
                       children: [
+                        // ── La lueur Aurora, en fond ──────────────────────
+                        if (mode == IslandMode.expanded)
+                          const Positioned.fill(child: IgnorePointer(child: _AuroraGlow())),
                         // ── La vue ─────────────────────────────────────────
                         // La vue est posée à sa taille finale (jamais négative pendant
                         // l'animation de l'enveloppe) ; l'enveloppe la rogne en attendant.
@@ -349,7 +362,7 @@ class _EarsPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     const r = 14.0;
-    final paint = Paint()..color = Colors.black;
+    final paint = Paint()..color = Palette.islandTop;
     // Gauche : un carré de 14×14 moins un cercle centré en (0, 14).
     final left = Path.combine(
       PathOperation.difference,
@@ -367,4 +380,41 @@ class _EarsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _EarsPainter oldDelegate) => false;
+}
+
+/// Deux halos très doux — cyan à gauche, violet à droite — derrière les cartes.
+class _AuroraGlow extends StatelessWidget {
+  const _AuroraGlow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned(
+          left: -80,
+          top: -60,
+          child: Container(
+            width: 300,
+            height: 220,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(colors: [Palette.accent.withValues(alpha: 0.13), Palette.accent.withValues(alpha: 0)]),
+            ),
+          ),
+        ),
+        Positioned(
+          right: -90,
+          bottom: -90,
+          child: Container(
+            width: 320,
+            height: 240,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(colors: [Palette.accent3.withValues(alpha: 0.13), Palette.accent3.withValues(alpha: 0)]),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }

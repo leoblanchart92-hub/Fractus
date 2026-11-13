@@ -66,10 +66,10 @@ class _ChatViewState extends State<ChatView> {
           _scrollDown();
         },
         onStatus: (status) {
-          if (!streamed) {
-            reply.text = '⟡ $status…';
-            widget.state.touch();
-          }
+          // Entre deux tours, on montre l'outil en cours ; le prochain texte le remplacera.
+          streamed = false;
+          reply.text = '⟡ $status…';
+          widget.state.touch();
         },
       );
       reply.text = text.isEmpty ? '…' : text;
@@ -147,7 +147,7 @@ class _Bubble extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 420),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          color: user ? const Color(0xFF2A2D32) : Palette.card,
+          color: user ? Palette.tabOn : Palette.card,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: Palette.hairline),
         ),
@@ -212,13 +212,13 @@ class _Field extends StatelessWidget {
               child: Container(
                 width: 30,
                 height: 30,
-                decoration: const BoxDecoration(color: Color(0xFFF5F6F8), shape: BoxShape.circle),
+                decoration: const BoxDecoration(gradient: LinearGradient(colors: Palette.aurora), shape: BoxShape.circle),
                 child: busy
                     ? const Padding(
                         padding: EdgeInsets.all(8),
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0B0C0E)),
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                       )
-                    : const Icon(Icons.arrow_upward_rounded, size: 17, color: Color(0xFF0B0C0E)),
+                    : const Icon(Icons.arrow_upward_rounded, size: 17, color: Colors.white),
               ),
             ),
           ),

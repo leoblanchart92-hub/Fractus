@@ -35,11 +35,14 @@ lui, s'appelle **Fractus** : un petit cristal aux grands yeux.
   Toujours** ; `AskUserQuestion` montre ses choix (jusqu'à 4 questions, sélection multiple).
   Jamais rien d'autorisé sans un clic ; sans réponse, le terminal reprend la main.
 - 🎉 **Terminé / erreur** — Fractus fait sa roulade, la carte verte résume la réponse.
-- 💬 **Chat surpuissant** — avec votre clé **Groq** (gratuite) : le modèle le plus capable du compte
-  choisi automatiquement (gpt-oss-120b, Kimi K2, Llama 3.3 70B…), raisonnement au maximum, réponses en
-  streaming, et des **outils locaux en lecture seule** (sessions, lecture de fichiers, listing, recherche
-  de texte) que le modèle appelle lui-même pour répondre avec le vrai contenu de vos projets. En option,
-  `groq/compound` ajoute la recherche web et l'exécution de code côté Groq.
+- 🤖 **Fractus est lui-même un agent de code** — comme Claude Code, avec votre clé **Groq** (gratuite) :
+  le modèle le plus capable du compte choisi automatiquement (gpt-oss-120b, Kimi K2, Llama 3.3 70B…),
+  raisonnement au maximum, réponses en streaming, et des outils sur votre machine : il **lit, cherche,
+  écrit, modifie des fichiers, lance des commandes PowerShell et consulte des URL**. Chaque action
+  passe par la carte **Autoriser / Refuser / Toujours** de l'île ; son travail apparaît comme une
+  session « Fractus » avec ses étapes. En option, `groq/compound` ajoute la recherche web côté Groq.
+- 🌌 **Thème Aurora** — noir bleuté profond, surfaces teintées, accent cyan → violet en dégradé sur les
+  boutons et en lueur diffuse derrière les cartes.
 - ⚙️ **Réglages dans l'île** — survol, son, lancement avec Windows, port des hooks, clé API, mises à jour, démo, quitter.
 - 🫥 **En arrière-plan** — pas de fenêtre dans la barre des tâches : une icône dans la zone de
   notification (clic gauche : ouvrir l'île ; clic droit : réglages, mises à jour, quitter) et, par
@@ -75,9 +78,17 @@ La clé est écrite dans `%APPDATA%\fractus\settings.json` (champ `chatApiKey`) 
 { "chatApiKey": "gsk_xxxxxxxx", "chatModel": "", "chatWebSearch": false }
 ```
 
-Ce que le modèle peut faire pendant le chat : `get_sessions`, `read_file`, `list_directory`,
-`search_text`, `get_datetime` — rien d'autre. Il ne peut ni écrire, ni exécuter, ni approuver une
-permission : ça reste un clic humain sur la carte.
+Ce que l'agent peut faire pendant le chat :
+
+| Outil | Permission ? |
+|---|---|
+| `get_sessions`, `read_file`, `list_directory`, `search_text`, `get_datetime` | non (lecture) |
+| `write_file`, `edit_file` | carte **Autoriser / Refuser / Toujours** |
+| `run_command` (PowerShell, dans le dossier de travail) | carte, « Toujours » par première commande (`git`, `npm`…) |
+| `fetch_url` | carte |
+
+Le dossier de travail se règle dans Réglages → Chat (vide = projet de l'agent en avant, sinon votre
+profil). Fractus n'approuve jamais une permission d'un autre agent : ça reste un clic humain.
 
 ## Construire et lancer (Windows)
 

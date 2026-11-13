@@ -108,10 +108,8 @@ class _IslandButtonState extends State<IslandButton> {
 
   @override
   Widget build(BuildContext context) {
-    final bg = widget.primary
-        ? (_hover ? Colors.white : const Color(0xFFF5F6F8))
-        : (_hover ? const Color(0x24FFFFFF) : const Color(0x14FFFFFF));
-    final fg = widget.primary ? const Color(0xFF0B0C0E) : Palette.ink;
+    final bg = widget.primary ? null : (_hover ? const Color(0x24FFFFFF) : const Color(0x14FFFFFF));
+    final fg = widget.primary ? Colors.white : Palette.ink;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hover = true),
@@ -123,7 +121,18 @@ class _IslandButtonState extends State<IslandButton> {
           duration: const Duration(milliseconds: 120),
           height: widget.compact ? 24 : 28,
           padding: EdgeInsets.symmetric(horizontal: widget.compact ? 10 : 14),
-          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
+          decoration: BoxDecoration(
+            color: bg,
+            gradient: widget.primary
+                ? LinearGradient(
+                    colors: _hover ? const [Color(0xFF5CCBFA), Color(0xFF9AA3FA), Color(0xFFBBA7FB)] : Palette.aurora,
+                  )
+                : null,
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: widget.primary
+                ? [BoxShadow(color: Palette.accent2.withValues(alpha: _hover ? 0.45 : 0.28), blurRadius: 14, offset: const Offset(0, 4))]
+                : null,
+          ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -148,7 +157,7 @@ class KeyHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = dark ? const Color(0xFF0B0C0E) : Palette.dim;
+    final c = dark ? Colors.white : Palette.dim;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
       height: 16,
@@ -249,7 +258,7 @@ class _MiniBotState extends State<MiniBot> {
                 decoration: BoxDecoration(
                   color: Palette.amber,
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.black, width: 1.5),
+                  border: Border.all(color: Palette.islandBottom, width: 1.5),
                 ),
               ),
             ),

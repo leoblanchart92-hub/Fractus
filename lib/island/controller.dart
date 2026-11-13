@@ -539,6 +539,12 @@ class IslandController extends ChangeNotifier {
 
   void _afterCard() {
     if (state.pendingApproval != null) return;
+    if (state.chatBusy) {
+      // Fractus travaille encore dans le chat : l'île reste ouverte dessus.
+      state.pinned = true;
+      state.touch();
+      return;
+    }
     state.pinned = false;
     if (state.mode == IslandMode.expanded && !_pointerInside) close();
     state.touch();

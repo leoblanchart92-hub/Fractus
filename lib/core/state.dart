@@ -125,6 +125,13 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       return next;
     }
+    // Le chat attend une décision (outil de Fractus) : on y retourne.
+    if (chatBusy) {
+      pinned = true;
+      view = IslandView.prompt;
+      notifyListeners();
+      return null;
+    }
     pinned = false;
     view = defaultView();
     notifyListeners();

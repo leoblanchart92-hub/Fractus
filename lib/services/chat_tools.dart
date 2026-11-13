@@ -1,16 +1,33 @@
-// Les outils que le modèle peut appeler pendant le chat (function calling).
-// Tous en LECTURE SEULE : voir les sessions, lire un fichier, lister un dossier,
-// chercher du texte. Fractus n'exécute jamais de commande et n'écrit jamais
-// rien pour le compte du modèle — et il n'approuve jamais une permission à sa place.
+// Les outils que le modèle appelle pendant le chat (function calling) — ce qui
+// fait de Fractus un agent, comme Claude Code :
+//   - lecture libre : sessions, lire un fichier, lister un dossier, chercher du texte ;
+//   - actions sous permission : écrire ou modifier un fichier, lancer une commande,
+//     aller chercher une URL. Chacune passe par la carte Autoriser / Refuser /
+//     Toujours de l'île : rien ne s'exécute sans un clic humain (ou une règle
+//     « Toujours autoriser » donnée plus tôt pour ce type d'action).
+// Le travail de Fractus apparaît comme une session à part entière dans l'île.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:http/http.dart' as http;
+
+import '../core/layout.dart';
+import '../core/models.dart';
 import '../core/state.dart';
+import '../island/controller.dart';
 
 class ChatTools {
-  ChatTools(this.state);
+  ChatTools(this.state, {required this.controller});
   final AppState state;
+  final IslandController controller;
+
+  /// Dossier de travail imposé dans les réglages (vide = projet en avant, sinon le profil).
+  String workspace = '';
+
+  static const String sessionId = 'fractus';
+  static const int maxCommandOutput = 30 * 1024;
 
   static const int maxFileBytes = 60 * 1024;
   static const int maxEntries = 300;
@@ -34,6 +51,23 @@ class ChatTools {
           'glob': {'type': 'string', 'description': 'Filtre sur le nom de fichier, ex. "*.dart" (facultatif).'},
         }, required: ['pattern']),
         _tool('get_datetime', 'Date et heure locales actuelles.', {}),
+        _tool('write_file', 'Crée ou remplace un fichier texte (les dossiers parents sont créés). Demande la permission à l\'utilisateur.', {
+          'path': {'type': 'string', 'description': 'Chemin du fichier.'},
+          'content': {'type': 'string', 'description': 'Contenu complet du fichier.'},
+        }, required: ['path', 'content']),
+        _tool('edit_file', 'Remplace un passage exact d\'un fichier par un autre (old_text doit apparaître une seule fois). Demande la permission.', {
+          'path': {'type': 'string', 'description': 'Chemin du fichier.'},
+          'old_text': {'type': 'string', 'description': 'Texte existant, exact.'},
+          'new_text': {'type': 'string', 'description': 'Texte de remplacement.'},
+        }, required: ['path', 'old_text', 'new_text']),
+        _tool('run_command', 'Exécute une commande PowerShell dans le dossier de travail et renvoie sa sortie (stdout+stderr, code de retour). Demande la permission. Pas de commande interactive.', {
+          'command': {'type': 'string', 'description': 'La commande PowerShell.'},
+          'description': {'type': 'string', 'description': 'Ce qu\'elle fait, en quelques mots (montré à l\'utilisateur).'},
+          'timeout_seconds': {'type': 'integer', 'description': 'Délai maximal (120 par défaut, 600 max).'},
+        }, required: ['command']),
+        _tool('fetch_url', 'Télécharge le texte d\'une URL (HTTP GET, 80 Ko max). Demande la permission.', {
+          'url': {'type': 'string', 'description': 'URL complète.'},
+        }, required: ['url']),
       ];
 
   Map<String, dynamic> _tool(String name, String description, Map<String, dynamic> props, {List<String> required = const []}) {
@@ -58,9 +92,22 @@ class ChatTools {
         return 'cherche « ${args['pattern']} »';
       case 'get_sessions':
         return 'regarde les sessions';
+      case 'write_file':
+        return 'écrit ${_short(args['path'])}';
+      case 'edit_file':
+        return 'modifie ${_short(args['path'])}';
+      case 'run_command':
+        return 'lance « ${_oneLine(args['command'])} »';
+      case 'fetch_url':
+        return 'consulte ${args['url']}';
       default:
         return name;
     }
+  }
+
+  String _oneLine(Object? v) {
+    final s = (v ?? '').toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+    return s.length > 60 ? '${s.substring(0, 60)}…' : s;
   }
 
   String _short(Object? p) {
@@ -82,6 +129,14 @@ class ChatTools {
           return await _searchText(args);
         case 'get_datetime':
           return jsonEncode({'now': DateTime.now().toIso8601String(), 'timezone': DateTime.now().timeZoneName});
+        case 'write_file':
+          return await _writeFile(args);
+        case 'edit_file':
+          return await _editFile(args);
+        case 'run_command':
+          return await _runCommand(args);
+        case 'fetch_url':
+          return await _fetchUrl(args);
         default:
           return jsonEncode({'error': 'Outil inconnu : $name'});
       }
@@ -92,7 +147,90 @@ class ChatTools {
 
   // ── Sessions ─────────────────────────────────────────────────────────────
 
-  String _frontCwd() => state.frontSession?.cwd ?? '';
+  /// Le dossier de travail de Fractus : réglage, sinon le projet d'un agent en
+  /// cours, sinon le profil de l'utilisateur.
+  String baseDir() {
+    if (workspace.trim().isNotEmpty) return workspace.trim();
+    for (final s in state.orderedSessions) {
+      if (s.id != sessionId && s.cwd.isNotEmpty) return s.cwd;
+    }
+    return Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'] ?? Directory.current.path;
+  }
+
+  String _frontCwd() => baseDir();
+
+  String _projectName() {
+    final cleaned = baseDir().replaceAll(RegExp(r'[\\/]+$'), '');
+    final i = cleaned.lastIndexOf(RegExp(r'[\\/]'));
+    final name = i < 0 ? cleaned : cleaned.substring(i + 1);
+    return name.isEmpty ? 'Fractus' : name;
+  }
+
+  // ── La session « Fractus » dans l'île ─────────────────────────────────────
+
+  Session session() => state.upsertSession(sessionId, _projectName(), 'Fractus', cwd: baseDir());
+
+  /// Au début d'une réponse : Fractus réfléchit.
+  void begin(String prompt) {
+    final s = session();
+    s.state = BotState.thinking;
+    s.prompt = prompt;
+    s.lastMessage = null;
+    s.addStep(SessionStep(StepKind.prompt, prompt));
+    state.touch();
+  }
+
+  /// Une étape visible dans la pastille à chaque outil.
+  void step(String name, Map<String, dynamic> args) {
+    final s = session();
+    final kind = switch (name) {
+      'read_file' || 'list_directory' || 'get_sessions' => StepKind.read,
+      'write_file' || 'edit_file' => StepKind.edit,
+      'run_command' => StepKind.run,
+      'search_text' || 'fetch_url' => StepKind.search,
+      _ => StepKind.note,
+    };
+    s.addStep(SessionStep(kind, describe(name, args)));
+    s.state = name == 'run_command' ? BotState.working : (name == 'search_text' || name == 'fetch_url' ? BotState.searching : BotState.working);
+    state.touch();
+  }
+
+  /// À la fin : la réponse est le dernier message, Fractus se repose.
+  void end(String answer, {bool error = false}) {
+    final s = state.sessions[sessionId];
+    if (s == null) return;
+    s.lastMessage = answer;
+    s.state = error ? BotState.error : BotState.idle;
+    s.updated = DateTime.now();
+    state.touch();
+  }
+
+  // ── Permissions ───────────────────────────────────────────────────────────
+
+  /// Demande l'accord de l'utilisateur via la carte de l'île. Renvoie null si
+  /// c'est accordé, sinon le JSON d'erreur à rendre au modèle.
+  Future<String?> _permission(String tool, Map<String, dynamic> input) async {
+    final s = session();
+    s.state = BotState.approval;
+    state.touch();
+    final reply = await controller.requestPermission({
+      'session_id': sessionId,
+      'cwd': baseDir(),
+      'fractus_agent': 'fractus',
+      'tool_name': tool,
+      'tool_input': input,
+      'request_id': 'fractus-${DateTime.now().microsecondsSinceEpoch}',
+    });
+    final decision = reply?['hookSpecificOutput']?['decision'];
+    final allowed = decision is Map && decision['behavior'] == 'allow';
+    s.state = BotState.working;
+    state.touch();
+    if (allowed) return null;
+    if (reply == null) {
+      return jsonEncode({'error': 'Pas de réponse de l\'utilisateur dans le temps imparti : action annulée. Demande-lui avant de réessayer.'});
+    }
+    return jsonEncode({'error': 'Refusé par l\'utilisateur. N\'insiste pas : propose une alternative ou demande ce qu\'il souhaite.'});
+  }
 
   /// Résumé compact, pour le prompt système.
   String sessionsSummary() {
@@ -136,6 +274,117 @@ class ChatTools {
               if (a.isQuestion) 'questions': a.questions!.map((q) => {'question': q.question, 'options': q.options}).toList(),
               'note': 'Seul l\'utilisateur peut répondre, via la carte de l\'île.',
             },
+    });
+  }
+
+  // ── Actions (sous permission) ─────────────────────────────────────────────
+
+  Future<String> _writeFile(Map<String, dynamic> args) async {
+    final path = _resolve(args['path']);
+    final content = (args['content'] ?? '').toString();
+    final denied = await _permission('Write', {'file_path': path, 'content': content});
+    if (denied != null) return denied;
+    final f = File(path);
+    final existed = await f.exists();
+    await f.parent.create(recursive: true);
+    await f.writeAsString(content);
+    return jsonEncode({'ok': true, 'path': path, 'created': !existed, 'bytes': utf8.encode(content).length});
+  }
+
+  Future<String> _editFile(Map<String, dynamic> args) async {
+    final path = _resolve(args['path']);
+    final oldText = (args['old_text'] ?? '').toString();
+    final newText = (args['new_text'] ?? '').toString();
+    final f = File(path);
+    if (!await f.exists()) return jsonEncode({'error': 'Fichier introuvable : $path'});
+    if (oldText.isEmpty) return jsonEncode({'error': 'old_text est vide.'});
+    final text = await f.readAsString();
+    final count = oldText.allMatches(text).length;
+    if (count == 0) return jsonEncode({'error': 'old_text introuvable dans le fichier (relis-le : read_file).'});
+    if (count > 1) return jsonEncode({'error': 'old_text apparaît $count fois : donne plus de contexte pour qu\'il soit unique.'});
+    final denied = await _permission('Edit', {'file_path': path, 'old_string': oldText, 'new_string': newText});
+    if (denied != null) return denied;
+    await f.writeAsString(text.replaceFirst(oldText, newText));
+    return jsonEncode({'ok': true, 'path': path});
+  }
+
+  Future<String> _runCommand(Map<String, dynamic> args) async {
+    final command = (args['command'] ?? '').toString().trim();
+    if (command.isEmpty) return jsonEncode({'error': 'Commande vide.'});
+    final timeout = ((args['timeout_seconds'] is num) ? (args['timeout_seconds'] as num).toInt() : 120).clamp(5, 600);
+    final denied = await _permission('Bash', {'command': command, if (args['description'] != null) 'description': args['description']});
+    if (denied != null) return denied;
+    final cwd = baseDir();
+    final sw = Stopwatch()..start();
+    final proc = await Process.start(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '[Console]::OutputEncoding=[Text.Encoding]::UTF8; \$ProgressPreference=\'SilentlyContinue\'; $command'],
+      workingDirectory: Directory(cwd).existsSync() ? cwd : null,
+      runInShell: false,
+    );
+    final out = StringBuffer();
+    var truncated = false;
+    void collect(String chunk) {
+      if (out.length >= maxCommandOutput) {
+        truncated = true;
+        return;
+      }
+      out.write(chunk);
+    }
+
+    final done = Future.wait([
+      proc.stdout.transform(utf8.decoder).forEach(collect),
+      proc.stderr.transform(utf8.decoder).forEach(collect),
+    ]);
+    int code;
+    var timedOut = false;
+    try {
+      code = await proc.exitCode.timeout(Duration(seconds: timeout));
+      await done.timeout(const Duration(seconds: 5), onTimeout: () => []);
+    } on TimeoutException {
+      timedOut = true;
+      proc.kill(ProcessSignal.sigkill);
+      code = -1;
+    }
+    sw.stop();
+    return jsonEncode({
+      'exit_code': code,
+      'timed_out': timedOut,
+      'duration_ms': sw.elapsedMilliseconds,
+      'cwd': cwd,
+      'output': out.toString(),
+      'truncated': truncated,
+    });
+  }
+
+  Future<String> _fetchUrl(Map<String, dynamic> args) async {
+    final url = (args['url'] ?? '').toString().trim();
+    final uri = Uri.tryParse(url);
+    if (uri == null || !(uri.scheme == 'http' || uri.scheme == 'https')) return jsonEncode({'error': 'URL invalide : $url'});
+    final denied = await _permission('WebFetch', {'url': url});
+    if (denied != null) return denied;
+    final res = await http.get(uri, headers: {'User-Agent': 'Fractus (Windows)', 'Accept': 'text/html,text/plain,application/json;q=0.9,*/*;q=0.5'}).timeout(const Duration(seconds: 30));
+    var body = utf8.decode(res.bodyBytes, allowMalformed: true);
+    final type = res.headers['content-type'] ?? '';
+    if (type.contains('html')) {
+      body = body
+          .replaceAll(RegExp(r'<(script|style|noscript)[^>]*>[\s\S]*?</\1>', caseSensitive: false), ' ')
+          .replaceAll(RegExp(r'<br\s*/?>|</(p|div|li|h[1-6]|tr)>', caseSensitive: false), '\n')
+          .replaceAll(RegExp(r'<[^>]+>'), ' ')
+          .replaceAll('&nbsp;', ' ')
+          .replaceAll('&amp;', '&')
+          .replaceAll('&lt;', '<')
+          .replaceAll('&gt;', '>')
+          .replaceAll('&quot;', '"')
+          .replaceAll(RegExp(r'[ \t]+'), ' ')
+          .replaceAll(RegExp(r'\n\s*\n+'), '\n');
+    }
+    const max = 80 * 1024;
+    return jsonEncode({
+      'status': res.statusCode,
+      'content_type': type,
+      'truncated': body.length > max,
+      'text': body.length > max ? body.substring(0, max) : body,
     });
   }
 
