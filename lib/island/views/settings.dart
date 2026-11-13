@@ -73,6 +73,11 @@ class _SettingsViewState extends State<SettingsView> {
     _refreshAddresses();
   }
 
+  Future<void> _refreshMemory() async {
+    final n = await widget.memory.count();
+    if (mounted) setState(() => _memoryCount = n);
+  }
+
   Future<void> _refreshAddresses() async {
     final a = await RemoteServer.localAddresses();
     if (mounted) setState(() => _addresses = a);

@@ -248,12 +248,12 @@ class RemoteServer {
     final path = req.uri.path;
     try {
       if (req.method == 'GET' && path == '/api/ping') {
-        return _json(res, {'app': 'fractus', 'version': version(), 'host': Platform.localHostname});
+        return await _json(res, {'app': 'fractus', 'version': version(), 'host': Platform.localHostname});
       }
-      if (!path.startsWith('/api/')) return _json(res, {'error': 'not found'}, status: 404);
-      if (!_authorized(req)) return _json(res, {'error': 'code d\'appairage incorrect'}, status: 401);
+      if (!path.startsWith('/api/')) return await _json(res, {'error': 'not found'}, status: 404);
+      if (!_authorized(req)) return await _json(res, {'error': 'code d\'appairage incorrect'}, status: 401);
 
-      if (req.method == 'GET' && path == '/api/status') return _json(res, _status());
+      if (req.method == 'GET' && path == '/api/status') return await _json(res, _status());
 
       if (req.method == 'GET' && path == '/api/events') {
         res.statusCode = 200;
@@ -272,39 +272,39 @@ class RemoteServer {
       if (req.method == 'POST' && path == '/api/approvals/decide') {
         final b = await _body(req);
         final a = state.pendingApproval;
-        if (a == null || a.requestId != b['requestId']) return _json(res, {'error': 'Cette demande n\'est plus en attente.', 'status': _status()}, status: 409);
+        if (a == null || a.requestId != b['requestId']) return await _json(res, {'error': 'Cette demande n\'est plus en attente.', 'status': _status()}, status: 409);
         final d = switch (b['decision']) { 'allow' => Decision.allow, 'always' => Decision.always, _ => Decision.deny };
         controller.decide(d);
-        return _json(res, {'ok': true, 'status': _status()});
+        return await _json(res, {'ok': true, 'status': _status()});
       }
 
       if (req.method == 'POST' && path == '/api/approvals/answer') {
         final b = await _body(req);
         final a = state.pendingApproval;
-        if (a == null || a.requestId != b['requestId'] || !a.isQuestion) return _json(res, {'error': 'Cette question n\'est plus en attente.'}, status: 409);
+        if (a == null || a.requestId != b['requestId'] || !a.isQuestion) return await _json(res, {'error': 'Cette question n\'est plus en attente.'}, status: 409);
         final raw = b['answers'];
         final answers = <String, String>{};
         if (raw is Map) raw.forEach((k, v) => answers['$k'] = '$v');
-        if (answers.isEmpty) return _json(res, {'error': 'answers manquant'}, status: 400);
+        if (answers.isEmpty) return await _json(res, {'error': 'answers manquant'}, status: 400);
         controller.answerQuestion(answers);
-        return _json(res, {'ok': true, 'status': _status()});
+        return await _json(res, {'ok': true, 'status': _status()});
       }
 
       if (req.method == 'POST' && path == '/api/chat') {
         final b = await _body(req);
         final text = (b['text'] ?? '').toString().trim();
-        if (text.isEmpty) return _json(res, {'error': 'text manquant'}, status: 400);
-        if (state.chatBusy) return _json(res, {'error': 'Fractus est déjà occupé.'}, status: 409);
-        if (!chat.configured) return _json(res, {'error': 'Pas de clé Groq sur le PC (Réglages → Chat).'}, status: 409);
+        if (text.isEmpty) return await _json(res, {'error': 'text manquant'}, status: 400);
+        if (state.chatBusy) return await _json(res, {'error': 'Fractus est déjà occupé.'}, status: 409);
+        if (!chat.configured) return await _json(res, {'error': 'Pas de clé Groq sur le PC (Réglages → Chat).'}, status: 409);
         // L'île s'ouvre sur le chat pour que l'écran du PC montre ce qui se passe.
         controller.open(IslandView.prompt);
         unawaited(ChatRunner.send(state, chat, text));
-        return _json(res, {'ok': true}, status: 202);
+        return await _json(res, {'ok': true}, status: 202);
       }
 
       if (req.method == 'POST' && path == '/api/chat/new') {
         await state.newConversation();
-        return _json(res, {'ok': true, 'status': _status()});
+        return await _json(res, {'ok': true, 'status': _status()});
       }
 
       if (req.method == 'POST' && path == '/api/action') {
@@ -316,13 +316,13 @@ class RemoteServer {
         } catch (_) {
           parsed = {'ok': true, 'output': out};
         }
-        return _json(res, parsed, status: out.startsWith('{"error"') ? 400 : 200);
+        return await _json(res, parsed, status: out.startsWith('{"error"') ? 400 : 200);
       }
 
       if (req.method == 'GET' && path == '/api/screen.jpg') {
         final w = int.tryParse(req.uri.queryParameters['w'] ?? '') ?? 1100;
         final bytes = await tools.screenJpeg(maxWidth: w.clamp(320, 2400));
-        if (bytes == null) return _json(res, {'error': 'capture impossible'}, status: 500);
+        if (bytes == null) return await _json(res, {'error': 'capture impossible'}, status: 500);
         res.statusCode = 200;
         res.headers.contentType = ContentType('image', 'jpeg');
         res.headers.set('cache-control', 'no-store');
@@ -331,7 +331,7 @@ class RemoteServer {
         return;
       }
 
-      return _json(res, {'error': 'not found'}, status: 404);
+      return await _json(res, {'error': 'not found'}, status: 404);
     } catch (e) {
       try {
         await _json(res, {'error': e.toString()}, status: 500);
