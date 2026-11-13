@@ -29,14 +29,16 @@ class ChatService {
 
   /// Les modèles qu'on préfère, du plus capable au plus modeste. Le premier
   /// disponible sur le compte est retenu quand le réglage « Modèle » est vide.
+  /// (Chacun a son propre quota chez Groq : quand l'un sature, on passe au suivant.)
   static const List<String> preferred = [
     'openai/gpt-oss-120b',
     'moonshotai/kimi-k2-instruct-0905',
     'moonshotai/kimi-k2-instruct',
     'llama-3.3-70b-versatile',
+    'meta-llama/llama-4-scout-17b-16e-instruct',
     'qwen/qwen3-32b',
-    'meta-llama/llama-4-maverick-17b-128e-instruct',
     'openai/gpt-oss-20b',
+    'meta-llama/llama-4-maverick-17b-128e-instruct',
     'llama-3.1-8b-instant',
   ];
 
@@ -114,8 +116,8 @@ class ChatService {
     } catch (_) {}
   }
 
-  bool get _supportsReasoning {
-    final m = effectiveModel.toLowerCase();
+  static bool _supportsReasoningFor(String model) {
+    final m = model.toLowerCase();
     return m.contains('gpt-oss') || m.contains('qwen3') || m.contains('deepseek');
   }
 
@@ -160,7 +162,7 @@ ${tools.sessionsSummary()}''';
   /// Évite de dépasser le contexte : au-delà d'un budget de caractères, les
   /// plus vieux résultats d'outils sont remplacés par un résumé.
   void _prune(List<Map<String, dynamic>> messages) {
-    const budget = 320000;
+    const budget = 110000;
     int size() => messages.fold<int>(0, (n, m) => n + (m['content']?.toString().length ?? 0));
     for (var i = 1; i < messages.length - 6 && size() > budget; i++) {
       final m = messages[i];
@@ -187,7 +189,7 @@ ${tools.sessionsSummary()}''';
           .where((m) => m.text.trim().isNotEmpty && m.text != '…')
           .toList()
           .reversed
-          .take(40)
+          .take(24)
           .toList()
           .reversed
           .map((m) => {'role': m.role, 'content': m.text}),
@@ -200,7 +202,7 @@ ${tools.sessionsSummary()}''';
     try {
       for (var round = 0; round < 40; round++) {
         _prune(messages);
-        final result = await _streamOnce(messages, useTools: useTools, onDelta: (t) {
+        final result = await _streamOnce(messages, useTools: useTools, onStatus: onStatus, onDelta: (t) {
           answer = t;
           onDelta?.call(t);
         });
@@ -230,7 +232,7 @@ ${tools.sessionsSummary()}''';
           onStatus?.call(tools.describe(c.name, args));
           tools.step(c.name, args);
           final out = await tools.call(c.name, args);
-          messages.add({'role': 'tool', 'tool_call_id': c.id, 'name': c.name, 'content': _clip(out, 48000)});
+          messages.add({'role': 'tool', 'tool_call_id': c.id, 'name': c.name, 'content': _clip(out, 16000)});
         }
       }
       final text = answer.trim().isEmpty ? 'J\'ai atteint la limite d\'étapes pour cette réponse — dis-moi de continuer.' : answer.trim();
@@ -247,35 +249,99 @@ ${tools.sessionsSummary()}''';
     }
   }
 
+  /// Modèles momentanément saturés (429) → heure de fin de leur pénalité.
+  final Map<String, DateTime> _cooldown = {};
+
+  /// Le modèle à utiliser maintenant : celui prévu, ou le suivant de la liste
+  /// s'il est en pénalité de débit.
+  String _modelNow() {
+    final wanted = effectiveModel;
+    final now = DateTime.now();
+    _cooldown.removeWhere((_, until) => until.isBefore(now));
+    if (!_cooldown.containsKey(wanted)) return wanted;
+    final ids = models.map((m) => m.id).toSet();
+    for (final p in preferred) {
+      if (p != wanted && !_cooldown.containsKey(p) && (ids.isEmpty || ids.contains(p))) return p;
+    }
+    return wanted;
+  }
+
+  /// Délai suggéré par Groq dans un 429 (« Please try again in 7.5s »), en secondes.
+  static double? _retryAfter(Map<String, String> headers, String body) {
+    final h = headers['retry-after'];
+    if (h != null) {
+      final v = double.tryParse(h);
+      if (v != null) return v;
+    }
+    final m = RegExp(r'try again in\s*(\d+(?:\.\d+)?)\s*(ms|s|m)\b', caseSensitive: false).firstMatch(body);
+    if (m == null) return null;
+    final v = double.parse(m.group(1)!);
+    return switch (m.group(2)!.toLowerCase()) { 'ms' => v / 1000, 'm' => v * 60, _ => v };
+  }
+
   Future<_Turn> _streamOnce(
     List<Map<String, dynamic>> messages, {
     required bool useTools,
     required void Function(String) onDelta,
+    void Function(String status)? onStatus,
   }) async {
-    final body = <String, dynamic>{
-      'model': effectiveModel,
-      'messages': messages,
-      'stream': true,
-      'temperature': 0.4,
-      'max_tokens': 4096,
-      if (useTools) 'tools': tools.definitions,
-      if (useTools) 'tool_choice': 'auto',
-      if (_supportsReasoning) 'reasoning_effort': 'high',
-    };
-    final req = http.Request('POST', Uri.parse('$baseUrl/chat/completions'))
-      ..headers.addAll(_headers)
-      ..body = jsonEncode(body);
-    final client = http.Client();
-    try {
-      final res = await client.send(req).timeout(const Duration(seconds: 45));
-      if (res.statusCode != 200) {
-        final text = await res.stream.bytesToString();
-        // Paramètre refusé (ex. reasoning_effort, tools) : on retente sans.
-        if (res.statusCode == 400 && (useTools || _supportsReasoning) && _looksLikeParamError(text)) {
-          return await _streamOnceBare(messages, onDelta);
+    var model = _modelNow();
+    var attempt = 0;
+    while (true) {
+      attempt++;
+      final body = <String, dynamic>{
+        'model': model,
+        'messages': messages,
+        'stream': true,
+        'temperature': 0.4,
+        'max_tokens': 2048,
+        if (useTools) 'tools': tools.definitions,
+        if (useTools) 'tool_choice': 'auto',
+        if (_supportsReasoningFor(model)) 'reasoning_effort': 'medium',
+      };
+      final req = http.Request('POST', Uri.parse('$baseUrl/chat/completions'))
+        ..headers.addAll(_headers)
+        ..body = jsonEncode(body);
+      final client = http.Client();
+      try {
+        final res = await client.send(req).timeout(const Duration(seconds: 45));
+        if (res.statusCode == 429 && attempt <= 4) {
+          final text = await res.stream.bytesToString();
+          final wait = _retryAfter(res.headers, text);
+          final short = wait != null && wait <= 25;
+          if (short && attempt <= 2) {
+            // Petit délai annoncé : on patiente, puis on réessaie le même modèle.
+            onStatus?.call('Groq sature, nouvel essai dans ${wait!.ceil()} s');
+            await Future<void>.delayed(Duration(milliseconds: (wait * 1000).ceil() + 400));
+            continue;
+          }
+          // Saturé pour un moment : pénalité, et on bascule sur le modèle suivant.
+          _cooldown[model] = DateTime.now().add(Duration(seconds: (wait ?? 60).ceil().clamp(20, 900)));
+          final next = _modelNow();
+          if (next != model) {
+            onStatus?.call('Groq sature sur $model, bascule sur $next');
+            model = next;
+            continue;
+          }
+          throw Exception(_errorTextRaw(429, text));
         }
-        throw Exception(_errorTextRaw(res.statusCode, text));
+        if (res.statusCode != 200) {
+          final text = await res.stream.bytesToString();
+          // Paramètre refusé (ex. reasoning_effort, tools) : on retente sans.
+          if (res.statusCode == 400 && (useTools || _supportsReasoningFor(model)) && _looksLikeParamError(text)) {
+            return await _streamOnceBare(messages, onDelta, model: model);
+          }
+          throw Exception(_errorTextRaw(res.statusCode, text));
+        }
+        return await _readStream(res, onDelta);
+      } finally {
+        client.close();
       }
+    }
+  }
+
+  Future<_Turn> _readStream(http.StreamedResponse res, void Function(String) onDelta) async {
+    {
       final turn = _Turn();
       final buffer = StringBuffer();
       await for (final line in res.stream.transform(utf8.decoder).transform(const LineSplitter()).timeout(const Duration(seconds: 90))) {
@@ -320,22 +386,20 @@ ${tools.sessionsSummary()}''';
         if (turn.toolCalls[i].id.isEmpty) turn.toolCalls[i].id = 'call_$i';
       }
       return turn;
-    } finally {
-      client.close();
     }
   }
 
   /// Sans outils ni raisonnement : pour les modèles qui ne les acceptent pas.
-  Future<_Turn> _streamOnceBare(List<Map<String, dynamic>> messages, void Function(String) onDelta) async {
+  Future<_Turn> _streamOnceBare(List<Map<String, dynamic>> messages, void Function(String) onDelta, {String? model}) async {
     final res = await http
         .post(
           Uri.parse('$baseUrl/chat/completions'),
           headers: _headers,
           body: jsonEncode({
-            'model': effectiveModel,
+            'model': model ?? effectiveModel,
             'messages': messages.where((m) => m['role'] != 'tool' && m['tool_calls'] == null).toList(),
             'temperature': 0.4,
-            'max_tokens': 4096,
+            'max_tokens': 2048,
           }),
         )
         .timeout(const Duration(seconds: 90));
@@ -364,7 +428,11 @@ ${tools.sessionsSummary()}''';
       detail = (err is Map ? err['message'] : err)?.toString() ?? detail;
     } catch (_) {}
     if (status == 401) detail = 'clé refusée — vérifie-la dans Réglages → Chat.';
-    if (status == 429) detail = 'limite de débit Groq atteinte, réessaie dans un instant.';
+    if (status == 429) {
+      final m = RegExp(r'try again in\s*(\d+(?:\.\d+)?\s*(?:ms|s|m))', caseSensitive: false).firstMatch(detail);
+      detail = 'limite de débit Groq atteinte (offre gratuite : quelques milliers de tokens par minute)'
+          '${m != null ? ' — réessaie dans ${m.group(1)}' : ''}. Astuce : Réglages → Chat → choisis un modèle plus léger, ou patiente une minute.';
+    }
     if (status == 404) detail = 'modèle introuvable — choisis-en un autre dans Réglages → Chat.';
     return 'Erreur $status : $detail';
   }
