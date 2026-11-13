@@ -1,0 +1,35 @@
+{
+  "_comment": "À fusionner dans %USERPROFILE%\\.claude\\settings.json (ne remplace pas vos autres hooks). Remplacez C:\\chemin\\Fractus par le dossier du dépôt.",
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\chemin\\Fractus\\hook\\fractus-hook.ps1\"" } ] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\chemin\\Fractus\\hook\\fractus-hook.ps1\"" } ] }
+    ],
+    "PreToolUse": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\chemin\\Fractus\\hook\\fractus-hook.ps1\"" } ] }
+    ],
+    "PostToolUse": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\chemin\\Fractus\\hook\\fractus-hook.ps1\"" } ] }
+    ],
+    "PermissionRequest": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\chemin\\Fractus\\hook\\fractus-hook.ps1\"", "timeout": 120 } ] }
+    ],
+    "Notification": [
+      { "hooks": [ { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\chemin\\Fractus\\hook\\fractus-hook.ps1\"" } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\chemin\\Fractus\\hook\\fractus-hook.ps1\"" } ] }
+    ],
+    "SubagentStart": [
+      { "hooks": [ { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\chemin\\Fractus\\hook\\fractus-hook.ps1\"" } ] }
+    ],
+    "SubagentStop": [
+      { "hooks": [ { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\chemin\\Fractus\\hook\\fractus-hook.ps1\"" } ] }
+    ],
+    "SessionEnd": [
+      { "hooks": [ { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\chemin\\Fractus\\hook\\fractus-hook.ps1\"" } ] }
+    ]
+  }
+}
