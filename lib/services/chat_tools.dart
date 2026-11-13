@@ -68,6 +68,46 @@ class ChatTools {
         _tool('fetch_url', 'Télécharge le texte d\'une URL (HTTP GET, 80 Ko max). Demande la permission.', {
           'url': {'type': 'string', 'description': 'URL complète.'},
         }, required: ['url']),
+        // ── Le PC ──
+        _tool('open', 'Ouvre une application, un fichier, un dossier ou une URL avec Windows (Start-Process). Ex. "notepad", "code .", "https://…", "C:\\Users\\…\\doc.pdf". Demande la permission.', {
+          'target': {'type': 'string', 'description': 'Programme, chemin ou URL.'},
+          'arguments': {'type': 'string', 'description': 'Arguments éventuels.'},
+        }, required: ['target']),
+        _tool('system_info', 'Système : nom de machine, utilisateur, Windows, CPU, RAM, disques, batterie, uptime, écran(s).', {}),
+        _tool('list_processes', 'Processus en cours (nom, PID, mémoire, titre de fenêtre), triés par mémoire ; filtre facultatif.', {
+          'filter': {'type': 'string', 'description': 'Sous-chaîne du nom (facultatif).'},
+        }),
+        _tool('kill_process', 'Ferme un processus (par PID ou nom). Demande la permission.', {
+          'pid': {'type': 'integer', 'description': 'PID.'},
+          'name': {'type': 'string', 'description': 'Nom du processus (ex. "notepad").'},
+        }),
+        _tool('list_windows', 'Fenêtres ouvertes (titre, processus, PID), pour savoir ce qui est à l\'écran.', {}),
+        _tool('focus_window', 'Met une fenêtre au premier plan (par morceau de titre ou PID). Demande la permission.', {
+          'title': {'type': 'string', 'description': 'Morceau du titre.'},
+          'pid': {'type': 'integer', 'description': 'PID.'},
+        }),
+        _tool('send_keys', 'Tape du texte / des touches dans la fenêtre active (syntaxe SendKeys : {ENTER}, ^c, %{F4}, {TAB}…). Demande la permission. Utilise focus_window avant.', {
+          'keys': {'type': 'string', 'description': 'Texte ou séquence SendKeys.'},
+          'delay_ms': {'type': 'integer', 'description': 'Attente avant d\'envoyer (300 par défaut).'},
+        }, required: ['keys']),
+        _tool('clipboard_get', 'Lit le presse-papiers (texte). Demande la permission.', {}),
+        _tool('clipboard_set', 'Écrit du texte dans le presse-papiers. Demande la permission.', {
+          'text': {'type': 'string', 'description': 'Texte.'},
+        }, required: ['text']),
+        _tool('screenshot', 'Capture l\'écran dans un fichier PNG (chemin renvoyé) — utile pour l\'ouvrir ou le montrer à l\'utilisateur. Demande la permission.', {
+          'path': {'type': 'string', 'description': 'Chemin du PNG (facultatif : %TEMP%).'},
+        }),
+        _tool('notify', 'Affiche une notification Windows (titre + message).', {
+          'title': {'type': 'string', 'description': 'Titre.'},
+          'message': {'type': 'string', 'description': 'Message.'},
+        }, required: ['message']),
+        _tool('set_volume', 'Règle le volume principal (0-100) ou coupe/rétablit le son. Demande la permission.', {
+          'level': {'type': 'integer', 'description': '0 à 100.'},
+          'mute': {'type': 'boolean', 'description': 'Couper (true) / rétablir (false).'},
+        }),
+        _tool('power', 'Verrouille, met en veille, redémarre ou éteint le PC. Demande la permission.', {
+          'action': {'type': 'string', 'enum': ['lock', 'sleep', 'restart', 'shutdown'], 'description': 'Action.'},
+        }, required: ['action']),
       ];
 
   Map<String, dynamic> _tool(String name, String description, Map<String, dynamic> props, {List<String> required = const []}) {
@@ -100,6 +140,32 @@ class ChatTools {
         return 'lance « ${_oneLine(args['command'])} »';
       case 'fetch_url':
         return 'consulte ${args['url']}';
+      case 'open':
+        return 'ouvre ${_oneLine(args['target'])}';
+      case 'system_info':
+        return 'regarde le système';
+      case 'list_processes':
+        return 'liste les processus';
+      case 'kill_process':
+        return 'ferme ${args['name'] ?? args['pid']}';
+      case 'list_windows':
+        return 'regarde les fenêtres';
+      case 'focus_window':
+        return 'passe sur ${args['title'] ?? args['pid']}';
+      case 'send_keys':
+        return 'tape « ${_oneLine(args['keys'])} »';
+      case 'clipboard_get':
+        return 'lit le presse-papiers';
+      case 'clipboard_set':
+        return 'copie dans le presse-papiers';
+      case 'screenshot':
+        return 'capture l\'écran';
+      case 'notify':
+        return 'te notifie';
+      case 'set_volume':
+        return 'règle le volume';
+      case 'power':
+        return '${args['action']} le PC';
       default:
         return name;
     }
@@ -137,6 +203,33 @@ class ChatTools {
           return await _runCommand(args);
         case 'fetch_url':
           return await _fetchUrl(args);
+        case 'open':
+          return await _open(args);
+        case 'system_info':
+          return await _ps(_systemInfoScript);
+        case 'list_processes':
+          return await _ps(_processesScript((args['filter'] ?? '').toString()));
+        case 'kill_process':
+          return await _killProcess(args);
+        case 'list_windows':
+          return await _ps(_windowsScript);
+        case 'focus_window':
+          return await _focusWindow(args);
+        case 'send_keys':
+          return await _sendKeys(args);
+        case 'clipboard_get':
+          return await _gated('Fractus', {'action': 'Lire le presse-papiers'}, () => _ps('Get-Clipboard -Raw | ConvertTo-Json -Compress'));
+        case 'clipboard_set':
+          return await _gated('Fractus', {'action': 'Copier dans le presse-papiers', 'text': args['text']},
+              () => _ps('Set-Clipboard -Value ${_q((args['text'] ?? '').toString())}; \'{"ok":true}\''));
+        case 'screenshot':
+          return await _screenshot(args);
+        case 'notify':
+          return await _notify(args);
+        case 'set_volume':
+          return await _setVolume(args);
+        case 'power':
+          return await _power(args);
         default:
           return jsonEncode({'error': 'Outil inconnu : $name'});
       }
@@ -186,8 +279,8 @@ class ChatTools {
     final kind = switch (name) {
       'read_file' || 'list_directory' || 'get_sessions' => StepKind.read,
       'write_file' || 'edit_file' => StepKind.edit,
-      'run_command' => StepKind.run,
-      'search_text' || 'fetch_url' => StepKind.search,
+      'run_command' || 'open' || 'kill_process' || 'focus_window' || 'send_keys' || 'power' || 'set_volume' || 'screenshot' => StepKind.run,
+      'search_text' || 'fetch_url' || 'list_windows' || 'list_processes' || 'system_info' => StepKind.search,
       _ => StepKind.note,
     };
     s.addStep(SessionStep(kind, describe(name, args)));
@@ -387,6 +480,192 @@ class ChatTools {
       'text': body.length > max ? body.substring(0, max) : body,
     });
   }
+
+  // ── Le PC ─────────────────────────────────────────────────────────────────
+
+  /// Une action quelconque gardée par la carte de permission.
+  Future<String> _gated(String tool, Map<String, dynamic> input, Future<String> Function() run) async {
+    final denied = await _permission(tool, input);
+    if (denied != null) return denied;
+    return run();
+  }
+
+  /// Chaîne PowerShell entre apostrophes simples.
+  static String _q(String s) => "'${s.replaceAll("'", "''")}'";
+
+  /// Exécute un script PowerShell (sans carte : réservé aux lectures et aux
+  /// actions déjà autorisées) et renvoie sa sortie texte, ou un JSON d'erreur.
+  Future<String> _ps(String script, {int timeoutSeconds = 60}) async {
+    try {
+      final r = await Process.run(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '[Console]::OutputEncoding=[Text.Encoding]::UTF8; \$ProgressPreference=\'SilentlyContinue\'; $script'],
+        stdoutEncoding: utf8,
+        stderrEncoding: utf8,
+      ).timeout(Duration(seconds: timeoutSeconds));
+      final out = (r.stdout as String).trim();
+      final err = (r.stderr as String).trim();
+      if (r.exitCode != 0 && out.isEmpty) return jsonEncode({'error': err.isEmpty ? 'code ${r.exitCode}' : err});
+      if (out.isEmpty) return jsonEncode({'ok': true, if (err.isNotEmpty) 'stderr': err});
+      return out.length > maxCommandOutput ? '${out.substring(0, maxCommandOutput)}\n…[tronqué]' : out;
+    } on TimeoutException {
+      return jsonEncode({'error': 'Délai dépassé ($timeoutSeconds s).'});
+    } catch (e) {
+      return jsonEncode({'error': e.toString()});
+    }
+  }
+
+  Future<String> _open(Map<String, dynamic> args) async {
+    final target = (args['target'] ?? '').toString().trim();
+    final arguments = (args['arguments'] ?? '').toString().trim();
+    if (target.isEmpty) return jsonEncode({'error': 'Cible vide.'});
+    return _gated('Fractus', {'action': 'Ouvrir', 'target': target, if (arguments.isNotEmpty) 'arguments': arguments}, () async {
+      final cwd = baseDir();
+      final script = arguments.isEmpty
+          ? 'Set-Location ${_q(cwd)}; Start-Process ${_q(target)}; \'{"ok":true}\''
+          : 'Set-Location ${_q(cwd)}; Start-Process ${_q(target)} -ArgumentList ${_q(arguments)}; \'{"ok":true}\'';
+      return _ps(script);
+    });
+  }
+
+  Future<String> _killProcess(Map<String, dynamic> args) async {
+    final pid = args['pid'];
+    final name = (args['name'] ?? '').toString().trim();
+    if (pid is! num && name.isEmpty) return jsonEncode({'error': 'Donne un pid ou un name.'});
+    return _gated('Fractus', {'action': 'Fermer le processus', 'target': pid is num ? 'PID ${pid.toInt()}' : name}, () {
+      final sel = pid is num ? 'Get-Process -Id ${pid.toInt()}' : 'Get-Process -Name ${_q(name.replaceAll(RegExp(r'\.exe\$', caseSensitive: false), ''))}';
+      return _ps('\$p = $sel -ErrorAction Stop; \$p | Stop-Process -Force -ErrorAction Stop; @{ok=\$true; closed=@(\$p | ForEach-Object { \$_.ProcessName })} | ConvertTo-Json -Compress');
+    });
+  }
+
+  Future<String> _focusWindow(Map<String, dynamic> args) async {
+    final title = (args['title'] ?? '').toString().trim();
+    final pid = args['pid'];
+    if (title.isEmpty && pid is! num) return jsonEncode({'error': 'Donne un title ou un pid.'});
+    return _gated('Fractus', {'action': 'Mettre au premier plan', 'target': title.isNotEmpty ? title : 'PID ${(pid as num).toInt()}'}, () {
+      final sel = pid is num
+          ? 'Get-Process -Id ${pid.toInt()} -ErrorAction Stop'
+          : 'Get-Process | Where-Object { \$_.MainWindowHandle -ne 0 -and \$_.MainWindowTitle -like (\'*\' + ${_q(title)} + \'*\') } | Select-Object -First 1';
+      return _ps('''
+\$p = $sel
+if (-not \$p -or \$p.MainWindowHandle -eq 0) { '{"error":"Fenêtre introuvable"}'; exit 0 }
+Add-Type @"
+using System; using System.Runtime.InteropServices;
+public class FxWin { [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr h, int n); }
+"@
+[FxWin]::ShowWindowAsync(\$p.MainWindowHandle, 9) | Out-Null
+[FxWin]::SetForegroundWindow(\$p.MainWindowHandle) | Out-Null
+@{ok=\$true; title=\$p.MainWindowTitle; pid=\$p.Id} | ConvertTo-Json -Compress
+''');
+    });
+  }
+
+  Future<String> _sendKeys(Map<String, dynamic> args) async {
+    final keys = (args['keys'] ?? '').toString();
+    if (keys.isEmpty) return jsonEncode({'error': 'keys vide.'});
+    final delay = ((args['delay_ms'] is num) ? (args['delay_ms'] as num).toInt() : 300).clamp(0, 5000);
+    return _gated('Fractus', {'action': 'Taper au clavier', 'keys': keys}, () {
+      return _ps('Start-Sleep -Milliseconds $delay; \$w = New-Object -ComObject WScript.Shell; \$w.SendKeys(${_q(keys)}); \'{"ok":true}\'');
+    });
+  }
+
+  Future<String> _screenshot(Map<String, dynamic> args) async {
+    var path = (args['path'] ?? '').toString().trim();
+    if (path.isEmpty) path = '${Directory.systemTemp.path}${Platform.pathSeparator}fractus-${DateTime.now().millisecondsSinceEpoch}.png';
+    return _gated('Fractus', {'action': 'Capturer l\'écran', 'target': path}, () {
+      return _ps('''
+Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+\$b = [System.Windows.Forms.SystemInformation]::VirtualScreen
+\$bmp = New-Object System.Drawing.Bitmap \$b.Width, \$b.Height
+\$g = [System.Drawing.Graphics]::FromImage(\$bmp)
+\$g.CopyFromScreen(\$b.Left, \$b.Top, 0, 0, \$bmp.Size)
+\$bmp.Save(${_q(path)}, [System.Drawing.Imaging.ImageFormat]::Png)
+\$g.Dispose(); \$bmp.Dispose()
+@{ok=\$true; path=${_q(path)}; width=\$b.Width; height=\$b.Height} | ConvertTo-Json -Compress
+''');
+    });
+  }
+
+  Future<String> _notify(Map<String, dynamic> args) async {
+    final title = (args['title'] ?? 'Fractus').toString();
+    final message = (args['message'] ?? '').toString();
+    return _ps('''
+[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+\$x = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+\$t = \$x.GetElementsByTagName('text'); \$t.Item(0).AppendChild(\$x.CreateTextNode(${_q(title)})) | Out-Null; \$t.Item(1).AppendChild(\$x.CreateTextNode(${_q(message)})) | Out-Null
+\$n = [Windows.UI.Notifications.ToastNotification]::new(\$x)
+[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Fractus').Show(\$n)
+'{"ok":true}'
+''');
+  }
+
+  Future<String> _setVolume(Map<String, dynamic> args) async {
+    final level = args['level'];
+    final mute = args['mute'];
+    if (level is! num && mute is! bool) return jsonEncode({'error': 'Donne level (0-100) ou mute.'});
+    final what = mute is bool ? (mute ? 'Couper le son' : 'Rétablir le son') : 'Volume ${(level as num).toInt().clamp(0, 100)} %';
+    return _gated('Fractus', {'action': what}, () {
+      // Via les touches multimédia : VK_VOLUME_MUTE 0xAD, DOWN 0xAE, UP 0xAF (2 % par appui).
+      final sb = StringBuffer('''
+\$c = Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern void keybd_event(byte k, byte s, uint f, UIntPtr e);' -Name FxKey -Namespace Fx -PassThru
+function Tap(\$k) { \$c::keybd_event(\$k, 0, 0, [UIntPtr]::Zero); \$c::keybd_event(\$k, 0, 2, [UIntPtr]::Zero) }
+''');
+      if (mute is bool) {
+        sb.writeln('Tap 0xAD');
+      } else {
+        final target = (level as num).toInt().clamp(0, 100);
+        sb.writeln('1..50 | ForEach-Object { Tap 0xAE }');
+        sb.writeln('1..${(target / 2).round()} | ForEach-Object { Tap 0xAF }');
+      }
+      sb.writeln("'{\"ok\":true}'");
+      return _ps(sb.toString());
+    });
+  }
+
+  Future<String> _power(Map<String, dynamic> args) async {
+    final action = (args['action'] ?? '').toString();
+    final cmd = switch (action) {
+      'lock' => 'rundll32.exe user32.dll,LockWorkStation',
+      'sleep' => 'rundll32.exe powrprof.dll,SetSuspendState 0,1,0',
+      'restart' => 'shutdown.exe /r /t 5',
+      'shutdown' => 'shutdown.exe /s /t 5',
+      _ => '',
+    };
+    if (cmd.isEmpty) return jsonEncode({'error': 'Action inconnue : $action'});
+    final label = switch (action) { 'lock' => 'Verrouiller', 'sleep' => 'Mettre en veille', 'restart' => 'Redémarrer', _ => 'Éteindre' };
+    return _gated('Fractus', {'action': '$label le PC'}, () => _ps('$cmd; \'{"ok":true}\''));
+  }
+
+  static const String _systemInfoScript = '''
+\$os = Get-CimInstance Win32_OperatingSystem
+\$cs = Get-CimInstance Win32_ComputerSystem
+\$cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+\$bat = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue | Select-Object -First 1
+\$disks = Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | ForEach-Object { @{ drive=\$_.DeviceID; free_gb=[math]::Round(\$_.FreeSpace/1GB,1); total_gb=[math]::Round(\$_.Size/1GB,1) } }
+Add-Type -AssemblyName System.Windows.Forms
+\$screens = [System.Windows.Forms.Screen]::AllScreens | ForEach-Object { @{ device=\$_.DeviceName; width=\$_.Bounds.Width; height=\$_.Bounds.Height; primary=\$_.Primary } }
+@{
+  computer=\$env:COMPUTERNAME; user=\$env:USERNAME; os=\$os.Caption; version=\$os.Version
+  cpu=\$cpu.Name; cores=\$cpu.NumberOfLogicalProcessors
+  ram_total_gb=[math]::Round(\$cs.TotalPhysicalMemory/1GB,1); ram_free_gb=[math]::Round(\$os.FreePhysicalMemory/1MB,1)
+  uptime_hours=[math]::Round(((Get-Date) - \$os.LastBootUpTime).TotalHours,1)
+  battery_percent=\$(if (\$bat) { \$bat.EstimatedChargeRemaining } else { \$null })
+  disks=\$disks; screens=\$screens
+  home=\$env:USERPROFILE
+} | ConvertTo-Json -Compress -Depth 4
+''';
+
+  static String _processesScript(String filter) => '''
+Get-Process | Where-Object { ${filter.isEmpty ? '\$true' : '\$_.ProcessName -like (\'*\' + ${_q(filter)} + \'*\')'} } |
+  Sort-Object WorkingSet64 -Descending | Select-Object -First 60 |
+  ForEach-Object { @{ name=\$_.ProcessName; pid=\$_.Id; mem_mb=[math]::Round(\$_.WorkingSet64/1MB); title=\$_.MainWindowTitle } } |
+  ConvertTo-Json -Compress
+''';
+
+  static const String _windowsScript = '''
+Get-Process | Where-Object { \$_.MainWindowHandle -ne 0 -and \$_.MainWindowTitle } |
+  ForEach-Object { @{ title=\$_.MainWindowTitle; process=\$_.ProcessName; pid=\$_.Id } } | ConvertTo-Json -Compress
+''';
 
   // ── Fichiers ─────────────────────────────────────────────────────────────
 

@@ -17,25 +17,21 @@ class SettingsView extends StatefulWidget {
     required this.controller,
     required this.hookPort,
     required this.hookError,
-    required this.onDemo,
     required this.onQuit,
     required this.onRestartHooks,
     required this.updates,
     required this.onStartupChanged,
     required this.chat,
-    required this.demoRunning,
   });
   final AppState state;
   final IslandController controller;
   final int? hookPort;
   final String? hookError;
-  final VoidCallback onDemo;
   final VoidCallback onQuit;
   final VoidCallback onRestartHooks;
   final UpdateService updates;
   final ValueChanged<bool> onStartupChanged;
   final ChatService chat;
-  final bool demoRunning;
 
   @override
   State<SettingsView> createState() => _SettingsViewState();
@@ -250,8 +246,6 @@ class _SettingsViewState extends State<SettingsView> {
             _section('Fractus'),
             Row(
               children: [
-                IslandButton(label: widget.demoRunning ? 'Arrêter la démo' : 'Jouer la démo', compact: true, onTap: widget.onDemo),
-                const SizedBox(width: 8),
                 IslandButton(label: 'Quitter Fractus', compact: true, onTap: widget.onQuit),
                 const Spacer(),
                 Text('Interface d\'après Coucou (Louis Raillé, MIT)', style: ui(10.5, color: Palette.dim4)),

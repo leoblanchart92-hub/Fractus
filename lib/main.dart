@@ -13,7 +13,6 @@ import 'island/controller.dart';
 import 'island/island_widget.dart';
 import 'services/chat_service.dart';
 import 'services/chat_tools.dart';
-import 'services/demo.dart';
 import 'services/hook_server.dart';
 import 'services/startup_service.dart';
 import 'services/tray_service.dart';
@@ -31,7 +30,6 @@ Future<void> main() async {
   final controller = IslandController(state);
   final window = WindowService(state, controller);
   final hooks = HookServer(controller);
-  final demo = Demo(controller);
   final chat = ChatService(
     apiKey: settings.chatApiKey,
     model: settings.chatModel,
@@ -48,7 +46,6 @@ Future<void> main() async {
   final updates = UpdateService(autoCheck: settings.autoUpdate);
 
   Future<void> quit() async {
-    demo.stop();
     await hooks.stop();
     await tray.stop();
     await window.quit();
@@ -68,7 +65,6 @@ Future<void> main() async {
   updates.onAvailable = (_) => controller.alert(IslandView.update);
   // Avant l'installateur : on coupe le serveur et l'icône, la fenêtre suit.
   updates.onBeforeInstall = () async {
-    demo.stop();
     await hooks.stop();
     await tray.stop();
   };
@@ -78,7 +74,6 @@ Future<void> main() async {
     controller: controller,
     window: window,
     hooks: hooks,
-    demo: demo,
     chat: chat,
     updates: updates,
     onQuit: quit,
@@ -116,7 +111,6 @@ class FractusApp extends StatelessWidget {
     required this.controller,
     required this.window,
     required this.hooks,
-    required this.demo,
     required this.chat,
     required this.updates,
     required this.onQuit,
@@ -127,7 +121,6 @@ class FractusApp extends StatelessWidget {
   final IslandController controller;
   final WindowService window;
   final HookServer hooks;
-  final Demo demo;
   final ChatService chat;
   final UpdateService updates;
   final Future<void> Function() onQuit;
@@ -158,11 +151,6 @@ class FractusApp extends StatelessWidget {
           chat: chat,
           hookPort: () => hooks.port,
           hookError: () => hooks.error,
-          onDemo: () {
-            demo.toggle();
-            if (demo.running) controller.open(state.defaultView());
-          },
-          demoRunning: () => demo.running,
           onQuit: onQuit,
           onRestartHooks: () async {
             await hooks.start(state.settings.hookPort);

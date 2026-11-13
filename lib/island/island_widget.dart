@@ -30,12 +30,10 @@ class IslandWidget extends StatefulWidget {
     required this.chat,
     required this.hookPort,
     required this.hookError,
-    required this.onDemo,
     required this.onQuit,
     required this.onRestartHooks,
     required this.updates,
     required this.onStartupChanged,
-    required this.demoRunning,
   });
 
   final AppState state;
@@ -43,12 +41,10 @@ class IslandWidget extends StatefulWidget {
   final ChatService chat;
   final int? Function() hookPort;
   final String? Function() hookError;
-  final VoidCallback onDemo;
   final VoidCallback onQuit;
   final VoidCallback onRestartHooks;
   final UpdateService updates;
   final ValueChanged<bool> onStartupChanged;
-  final bool Function() demoRunning;
 
   @override
   State<IslandWidget> createState() => _IslandWidgetState();
@@ -275,10 +271,10 @@ class _IslandWidgetState extends State<IslandWidget> {
           ),
           const SizedBox(width: 8),
           HeaderTab(
-            icon: widget.demoRunning() ? Icons.stop_rounded : Icons.add_rounded,
-            tooltip: widget.demoRunning() ? 'Arrêter la démo (sessions fictives)' : 'Jouer la démo (4 projets fictifs)',
-            size: 17,
-            onTap: widget.onDemo,
+            icon: Icons.auto_awesome_rounded,
+            tooltip: 'Demander à Fractus',
+            size: 15,
+            onTap: () => state.setView(IslandView.prompt),
           ),
           const Spacer(),
           if (running > 0) ...[
@@ -315,7 +311,7 @@ class _IslandWidgetState extends State<IslandWidget> {
         return OverviewView(state: state, controller: c);
       case IslandView.empty:
         return EmptyView(
-          onDemo: widget.onDemo,
+          onChat: () => state.setView(IslandView.prompt),
           onSettings: () => state.setView(IslandView.settings),
           hookPort: widget.hookPort(),
         );
@@ -337,13 +333,11 @@ class _IslandWidgetState extends State<IslandWidget> {
           controller: c,
           hookPort: widget.hookPort(),
           hookError: widget.hookError(),
-          onDemo: widget.onDemo,
           onQuit: widget.onQuit,
           onRestartHooks: widget.onRestartHooks,
           updates: widget.updates,
           onStartupChanged: widget.onStartupChanged,
           chat: widget.chat,
-          demoRunning: widget.demoRunning(),
         );
       case IslandView.update:
         return UpdateView(

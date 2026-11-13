@@ -7,7 +7,6 @@ import '../../core/models.dart';
 import '../../core/state.dart';
 import '../../core/theme.dart';
 import '../controller.dart';
-import '../../services/demo.dart';
 import '../widgets.dart';
 
 class OverviewView extends StatelessWidget {
@@ -80,7 +79,7 @@ class _FocusCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        TitleRow(color: session.color, project: Demo.sessionIds.contains(session.id) ? '${session.project} · démo' : session.project, subtitle: _subtitle),
+        TitleRow(color: session.color, project: session.project, subtitle: _subtitle),
         const SizedBox(height: 6),
         if (steps.isEmpty)
           Text(session.prompt ?? 'En attente…', maxLines: 2, overflow: TextOverflow.ellipsis, style: ui(13, color: Palette.dim)),

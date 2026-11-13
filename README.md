@@ -35,15 +35,16 @@ lui, s'appelle **Fractus** : un petit cristal aux grands yeux.
   Toujours** ; `AskUserQuestion` montre ses choix (jusqu'à 4 questions, sélection multiple).
   Jamais rien d'autorisé sans un clic ; sans réponse, le terminal reprend la main.
 - 🎉 **Terminé / erreur** — Fractus fait sa roulade, la carte verte résume la réponse.
-- 🤖 **Fractus est lui-même un agent de code** — comme Claude Code, avec votre clé **Groq** (gratuite) :
-  le modèle le plus capable du compte choisi automatiquement (gpt-oss-120b, Kimi K2, Llama 3.3 70B…),
-  raisonnement au maximum, réponses en streaming, et des outils sur votre machine : il **lit, cherche,
-  écrit, modifie des fichiers, lance des commandes PowerShell et consulte des URL**. Chaque action
-  passe par la carte **Autoriser / Refuser / Toujours** de l'île ; son travail apparaît comme une
-  session « Fractus » avec ses étapes. En option, `groq/compound` ajoute la recherche web côté Groq.
+- 🤖 **Fractus pilote votre PC et code pour vous** — un seul compagnon, un vrai agent, avec votre clé
+  **Groq** (gratuite) : le modèle le plus capable du compte choisi automatiquement (gpt-oss-120b, Kimi K2,
+  Llama 3.3 70B…), raisonnement au maximum, réponses en streaming. Ses outils : **fichiers et code**
+  (lire, chercher, écrire, modifier, PowerShell, URL) et **le PC** (ouvrir des applis/fichiers/URL,
+  fenêtres au premier plan, clavier, processus, presse-papiers, capture d'écran, volume, notifications,
+  verrouiller / veille / redémarrer / éteindre). Chaque action passe par la carte
+  **Autoriser / Refuser / Toujours** de l'île ; son travail apparaît comme la session « Fractus ».
 - 🌌 **Thème Aurora** — noir bleuté profond, surfaces teintées, accent cyan → violet en dégradé sur les
   boutons et en lueur diffuse derrière les cartes.
-- ⚙️ **Réglages dans l'île** — survol, son, lancement avec Windows, port des hooks, clé API, mises à jour, démo, quitter.
+- ⚙️ **Réglages dans l'île** — survol, son, lancement avec Windows, port des hooks, clé API, mises à jour, quitter.
 - 🫥 **En arrière-plan** — pas de fenêtre dans la barre des tâches : une icône dans la zone de
   notification (clic gauche : ouvrir l'île ; clic droit : réglages, mises à jour, quitter) et, par
   défaut, un lancement automatique avec Windows (désactivable dans les réglages).
@@ -82,10 +83,11 @@ Ce que l'agent peut faire pendant le chat :
 
 | Outil | Permission ? |
 |---|---|
-| `get_sessions`, `read_file`, `list_directory`, `search_text`, `get_datetime` | non (lecture) |
+| `get_sessions`, `read_file`, `list_directory`, `search_text`, `get_datetime`, `system_info`, `list_processes`, `list_windows`, `notify` | non (lecture / anodin) |
 | `write_file`, `edit_file` | carte **Autoriser / Refuser / Toujours** |
 | `run_command` (PowerShell, dans le dossier de travail) | carte, « Toujours » par première commande (`git`, `npm`…) |
 | `fetch_url` | carte |
+| `open`, `focus_window`, `send_keys`, `kill_process`, `clipboard_get`, `clipboard_set`, `screenshot`, `set_volume`, `power` | carte « Fractus veut agir sur ton PC », « Toujours » par type d'action |
 
 Le dossier de travail se règle dans Réglages → Chat (vide = projet de l'agent en avant, sinon votre
 profil). Fractus n'approuve jamais une permission d'un autre agent : ça reste un clic humain.
@@ -103,9 +105,9 @@ flutter run -d windows        # pour développer
 flutter build windows --release   # l'exécutable : build\windows\x64\runner\Release\fractus.exe
 ```
 
-Au premier lancement, Fractus sort de l'île et fait coucou. Comme aucune session ne tourne encore,
-ouvrez l'île (bord haut de l'écran, puis clic) : **Jouer la démo** rejoue le scénario des captures de
-Coucou (Korus, SBE Hub, Morning Brief, Publication IG) avec une permission, une question et une fin.
+Au premier lancement, Fractus sort de l'île et fait coucou. Ouvrez l'île (bord haut de l'écran, puis
+clic) → **Demander à Fractus**, et parlez-lui : « ouvre Spotify », « range mes téléchargements par type »,
+« crée un script qui… », « combien de RAM il me reste ? ».
 
 ## Brancher Claude Code
 
@@ -120,7 +122,7 @@ dans `%USERPROFILE%\.claude\settings.json`.
 | `lib/core/` | géométrie de l'île (`layout.dart`), palette (`theme.dart`), modèles, état, réglages |
 | `lib/companion/` | `bot_engine.dart` (le personnage et son moteur d'animation), `companion_view.dart` (ticker + CustomPaint) |
 | `lib/island/` | l'île (`island_widget.dart`), sa logique (`controller.dart`), les briques (`widgets.dart`) et les vues |
-| `lib/services/` | fenêtre transparente, icône de notification, lancement auto, mises à jour, serveur de hooks, démo, chat, sons |
+| `lib/services/` | fenêtre transparente, icône de notification, lancement auto, mises à jour, serveur de hooks, chat + outils de l'agent, sons |
 | `installer/` | le script Inno Setup de `Fractus-Setup-x.y.z.exe` |
 | `hook/` | le relais PowerShell pour Claude Code et l'exemple de `settings.json` |
 | `windows/` | le runner natif Flutter (CMake, Win32) |

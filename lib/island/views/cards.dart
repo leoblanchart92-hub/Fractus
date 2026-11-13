@@ -89,6 +89,8 @@ class ApprovalView extends StatelessWidget {
       case 'WebFetch':
       case 'WebSearch':
         return '$agent veut aller sur le web';
+      case 'Fractus':
+        return '$agent veut agir sur ton PC';
       default:
         return '$agent veut utiliser ${a.toolName}';
     }
@@ -314,8 +316,8 @@ class ConfusedView extends StatelessWidget {
 }
 
 class EmptyView extends StatelessWidget {
-  const EmptyView({super.key, required this.onDemo, required this.onSettings, this.hookPort});
-  final VoidCallback onDemo;
+  const EmptyView({super.key, required this.onChat, required this.onSettings, this.hookPort});
+  final VoidCallback onChat;
   final VoidCallback onSettings;
   final int? hookPort;
 
@@ -328,12 +330,12 @@ class EmptyView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text('Aucun agent en cours', style: ui(15, weight: FontWeight.w700)),
+          Text('Je suis Fractus. Qu\'est-ce qu\'on fait ?', style: ui(15, weight: FontWeight.w700)),
           const SizedBox(height: 3),
           Text(
             hookPort == null
                 ? 'Le serveur de hooks n\'a pas pu démarrer : vois les réglages.'
-                : 'Lance Claude Code avec le hook Fractus (port $hookPort), ou regarde la démo (4 projets fictifs).',
+                : 'Je peux coder, ouvrir des applis, gérer tes fichiers et piloter ton PC — en te demandant avant chaque action.',
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: ui(12.5, color: Palette.dim),
@@ -341,9 +343,9 @@ class EmptyView extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              IslandButton(label: 'Jouer la démo', primary: true, onTap: onDemo),
+              IslandButton(label: 'Demander à Fractus', primary: true, onTap: onChat),
               const SizedBox(width: 8),
-              IslandButton(label: 'Brancher un agent', onTap: onSettings),
+              IslandButton(label: 'Brancher Claude Code', onTap: onSettings),
             ],
           ),
         ],

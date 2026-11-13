@@ -368,12 +368,18 @@ class IslandController extends ChangeNotifier {
         return (input['url'] ?? '') as String;
       case 'WebSearch':
         return (input['query'] ?? '') as String;
+      case 'Fractus':
+        // Les actions PC de Fractus : « Ouvrir : notepad », « Taper au clavier : … ».
+        final action = (input['action'] ?? 'Action').toString();
+        final target = input['target'] ?? input['keys'] ?? input['text'];
+        return target == null ? action : '$action : ${_oneLine(target.toString())}';
       default:
         return input.isEmpty ? tool : _oneLine(input.toString());
     }
   }
 
   String alwaysKey(ApprovalInfo a) {
+    if (a.toolName == 'Fractus') return 'Fractus|${a.toolInput['action'] ?? ''}';
     final cmd = a.toolName == 'Bash' ? a.summary.split(' ').first : '';
     return '${a.toolName}|$cmd';
   }
