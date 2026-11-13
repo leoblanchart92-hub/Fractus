@@ -28,6 +28,10 @@ class HomePage extends StatelessWidget {
           ],
           const SectionTitle('Fractus'),
           _FractusCard(link: link),
+          if (s?.fractus != null && s!.fractus!.steps.isNotEmpty) ...[
+            const SectionTitle('En direct — ce qu\'il fait'),
+            _ActivityCard(session: s.fractus!, busy: s.chatBusy),
+          ],
           if (s != null && s.sessions.where((x) => x.id != 'fractus').isNotEmpty) ...[
             const SectionTitle('Autres agents'),
             for (final x in s.sessions.where((x) => x.id != 'fractus')) _SessionTile(session: x),
@@ -284,6 +288,78 @@ class _FractusCard extends StatelessWidget {
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Le fil des outils de Fractus (lecture, écriture, commande…), le plus récent en bas.
+class _ActivityCard extends StatelessWidget {
+  const _ActivityCard({required this.session, required this.busy});
+  final PcSession session;
+  final bool busy;
+
+  static IconData _icon(String kind) => switch (kind) {
+        'read' => Icons.description_outlined,
+        'edit' => Icons.edit_rounded,
+        'run' => Icons.terminal_rounded,
+        'search' => Icons.search_rounded,
+        'prompt' => Icons.person_rounded,
+        _ => Icons.circle_outlined,
+      };
+
+  static Color _color(String kind) => switch (kind) {
+        'read' => P.accent,
+        'edit' => P.green,
+        'run' => P.amber,
+        'search' => P.accent3,
+        'prompt' => P.dim,
+        _ => P.dim3,
+      };
+
+  static String _hm(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}:${d.second.toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    final steps = session.steps.reversed.take(14).toList().reversed.toList();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < steps.length; i++)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(width: 56, child: Text(_hm(steps[i].at), style: const TextStyle(color: P.dim3, fontSize: 11))),
+                    Icon(_icon(steps[i].kind), size: 15, color: _color(steps[i].kind)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        steps[i].text,
+                        maxLines: steps[i].kind == 'prompt' ? 3 : 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: steps[i].kind == 'prompt' ? P.ink : P.dim,
+                          fontWeight: steps[i].kind == 'prompt' ? FontWeight.w600 : FontWeight.w400,
+                          height: 1.25,
+                        ),
+                      ),
+                    ),
+                    if (busy && i == steps.length - 1)
+                      const Padding(
+                        padding: EdgeInsets.only(left: 6, top: 2),
+                        child: SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.5, color: P.accent)),
+                      ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),

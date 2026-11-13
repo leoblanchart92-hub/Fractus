@@ -1,5 +1,16 @@
 // Ce que le PC renvoie (GET /api/status, flux /api/events).
 
+class PcStep {
+  PcStep.fromJson(Map j)
+      : kind = '${j['kind'] ?? 'note'}',
+        text = '${j['text'] ?? ''}',
+        detail = j['detail'] as String?,
+        at = DateTime.tryParse('${j['at'] ?? ''}') ?? DateTime.now();
+  final String kind, text;
+  final String? detail;
+  final DateTime at;
+}
+
 class PcSession {
   PcSession.fromJson(Map j)
       : id = '${j['id'] ?? ''}',
@@ -8,11 +19,57 @@ class PcSession {
         state = '${j['state'] ?? 'idle'}',
         active = j['active'] == true,
         lastStep = j['lastStep'] as String?,
-        lastMessage = j['lastMessage'] as String?;
+        lastMessage = j['lastMessage'] as String?,
+        prompt = j['prompt'] as String?,
+        steps = ((j['steps'] as List?) ?? const []).whereType<Map>().map(PcStep.fromJson).toList();
 
   final String id, project, agent, state;
   final bool active;
-  final String? lastStep, lastMessage;
+  final String? lastStep, lastMessage, prompt;
+  final List<PcStep> steps;
+}
+
+class PcJournalEntry {
+  PcJournalEntry.fromJson(Map j)
+      : id = '${j['id'] ?? ''}',
+        kind = '${j['kind'] ?? 'action'}',
+        label = '${j['label'] ?? ''}',
+        detail = j['detail'] as String?,
+        path = j['path'] as String?,
+        canUndo = j['canUndo'] == true,
+        undone = j['undone'] == true,
+        at = DateTime.tryParse('${j['at'] ?? ''}') ?? DateTime.now();
+  final String id, kind, label;
+  final String? detail, path;
+  final bool canUndo, undone;
+  final DateTime at;
+}
+
+class PcConversationMeta {
+  PcConversationMeta.fromJson(Map j)
+      : id = '${j['id'] ?? ''}',
+        title = '${j['title'] ?? ''}',
+        count = (j['count'] is num) ? (j['count'] as num).toInt() : 0,
+        updated = DateTime.tryParse('${j['updated'] ?? ''}') ?? DateTime.now();
+  final String id, title;
+  final int count;
+  final DateTime updated;
+}
+
+class PcSettings {
+  PcSettings.fromJson(Map j)
+      : model = '${j['model'] ?? ''}',
+        effectiveModel = '${j['effectiveModel'] ?? ''}',
+        models = ((j['models'] as List?) ?? const []).map((m) => '$m').toList(),
+        workspace = '${j['workspace'] ?? ''}',
+        baseDir = '${j['baseDir'] ?? ''}',
+        webSearch = j['webSearch'] == true,
+        muted = j['muted'] == true,
+        configured = j['configured'] == true,
+        alwaysAllow = ((j['alwaysAllow'] as List?) ?? const []).map((m) => '$m').toList();
+  final String model, effectiveModel, workspace, baseDir;
+  final List<String> models, alwaysAllow;
+  final bool webSearch, muted, configured;
 }
 
 class PcQuestion {
@@ -64,7 +121,10 @@ class PcStatus {
         conversationId = '${(j['conversation'] as Map?)?['id'] ?? ''}',
         conversationTitle = '${(j['conversation'] as Map?)?['title'] ?? ''}',
         messages = (((j['conversation'] as Map?)?['messages'] as List?) ?? const []).whereType<Map>().map(PcMessage.fromJson).toList(),
-        quickActions = ((j['quickActions'] as Map?) ?? const {}).map((k, v) => MapEntry('$k', '$v'));
+        quickActions = ((j['quickActions'] as Map?) ?? const {}).map((k, v) => MapEntry('$k', '$v')),
+        journal = ((j['journal'] as List?) ?? const []).whereType<Map>().map(PcJournalEntry.fromJson).toList(),
+        conversations = ((j['conversations'] as List?) ?? const []).whereType<Map>().map(PcConversationMeta.fromJson).toList(),
+        settings = j['settings'] is Map ? PcSettings.fromJson(j['settings'] as Map) : null;
 
   final String version, host, botState;
   final bool chatBusy;
@@ -74,6 +134,9 @@ class PcStatus {
   final String conversationId, conversationTitle;
   final List<PcMessage> messages;
   final Map<String, String> quickActions;
+  final List<PcJournalEntry> journal;
+  final List<PcConversationMeta> conversations;
+  final PcSettings? settings;
 
   /// La session « Fractus » (le chat) s'il y en a une.
   PcSession? get fractus => sessions.where((s) => s.id == 'fractus').firstOrNull;

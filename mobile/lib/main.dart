@@ -8,6 +8,7 @@ import 'package:home_widget/home_widget.dart';
 import 'api.dart';
 import 'pages/chat.dart';
 import 'pages/home.dart';
+import 'pages/journal.dart';
 import 'pages/screen.dart';
 import 'pages/settings.dart';
 import 'theme.dart';
@@ -51,7 +52,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    if (!link.configured) _tab = 3;
+    if (!link.configured) _tab = 4;
   }
 
   @override
@@ -73,8 +74,9 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
       listenable: link,
       builder: (context, _) {
         final pages = [
-          HomePage(link: link, onOpenSettings: () => setState(() => _tab = 3)),
+          HomePage(link: link, onOpenSettings: () => setState(() => _tab = 4)),
           ChatPage(link: link),
+          JournalPage(link: link),
           ScreenPage(link: link),
           SettingsPage(link: link, onSaved: () => setState(() => _tab = 0)),
         ];
@@ -90,6 +92,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
                 label: 'Fractus',
               ),
               const NavigationDestination(icon: Icon(Icons.chat_bubble_rounded), label: 'Chat'),
+              const NavigationDestination(icon: Icon(Icons.history_rounded), label: 'Journal'),
               const NavigationDestination(icon: Icon(Icons.desktop_windows_rounded), label: 'Écran'),
               const NavigationDestination(icon: Icon(Icons.settings_rounded), label: 'Réglages'),
             ],

@@ -69,6 +69,34 @@ class _ChatPageState extends State<ChatPage> {
                   style: const TextStyle(color: P.dim, fontSize: 13),
                 ),
               ),
+              PopupMenuButton<String>(
+                tooltip: 'Conversations précédentes',
+                icon: const Icon(Icons.history_rounded, color: P.dim),
+                color: P.card2,
+                enabled: s != null && !s.chatBusy,
+                onSelected: (id) async {
+                  final err = id.startsWith('del:')
+                      ? await widget.link.run((c) => c.deleteConversation(id.substring(4)))
+                      : await widget.link.run((c) => c.openConversation(id));
+                  if (err != null && context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+                },
+                itemBuilder: (_) {
+                  final others = (s?.conversations ?? const <PcConversationMeta>[]).where((m) => m.id != s?.conversationId).toList();
+                  return [
+                    if (others.isEmpty)
+                      const PopupMenuItem(enabled: false, child: Text('Aucune autre conversation', style: TextStyle(color: P.dim3))),
+                    for (final m in others)
+                      PopupMenuItem(
+                        value: m.id,
+                        child: Text(m.title.isEmpty ? '(sans titre)' : m.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
+                    if (s != null && s.messages.isNotEmpty) ...[
+                      const PopupMenuDivider(),
+                      PopupMenuItem(value: 'del:${s.conversationId}', child: const Text('Supprimer cette conversation', style: TextStyle(color: P.red))),
+                    ],
+                  ];
+                },
+              ),
               IconButton(
                 tooltip: 'Nouvelle conversation',
                 icon: const Icon(Icons.add_comment_outlined, color: P.dim),

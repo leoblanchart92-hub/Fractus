@@ -42,6 +42,21 @@ class PcClient {
 
   Future<void> action(String name) => _post('/api/action', {'action': name});
 
+  Future<void> undo(String id) => _post('/api/journal/undo', {'id': id});
+  Future<void> clearJournal() => _post('/api/journal/clear', {});
+
+  Future<String> memory() async {
+    final r = await http.get(_u('/api/memory'), headers: _h).timeout(const Duration(seconds: 8));
+    return '${_json(r)['text'] ?? ''}';
+  }
+
+  Future<void> saveMemory(String text) => _post('/api/memory', {'text': text});
+
+  Future<void> openConversation(String id) => _post('/api/conversations/open', {'id': id});
+  Future<void> deleteConversation(String id) => _post('/api/conversations/delete', {'id': id});
+
+  Future<void> settings(Map<String, Object?> patch) => _post('/api/settings', patch);
+
   Future<Map<String, dynamic>> _post(String path, Map body) async {
     final r = await http.post(_u(path), headers: _h, body: jsonEncode(body)).timeout(const Duration(seconds: 20));
     return _json(r);

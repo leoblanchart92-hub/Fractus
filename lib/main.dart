@@ -64,7 +64,7 @@ Future<void> main() async {
   final startup = StartupService();
   final updates = UpdateService(autoCheck: settings.autoUpdate);
   // Le téléphone : serveur sur le réseau local, protégé par le code d'appairage.
-  final remote = RemoteServer(state: state, controller: controller, chat: chat, tools: chat.tools, version: () => updates.currentVersion);
+  final remote = RemoteServer(state: state, controller: controller, chat: chat, tools: chat.tools, version: () => updates.currentVersion, journal: journal, memory: memory);
   Future<void> applyRemote() async {
     if (state.settings.remoteEnabled) {
       if (state.settings.remoteToken.isEmpty) {

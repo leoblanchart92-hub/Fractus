@@ -14,6 +14,10 @@
 //   POST /api/chat/new                  nouvelle conversation
 //   POST /api/action                    { action: lock|sleep|mute|volume_up|volume_down|play_pause|next|prev }
 //   GET  /api/screen.jpg?w=1100         capture de l'écran
+//   POST /api/journal/undo { id } · POST /api/journal/clear
+//   GET  /api/memory · POST /api/memory { text }
+//   GET  /api/conversations?id= · POST /api/conversations/open|delete { id }
+//   POST /api/settings { model?, workspace?, webSearch?, muted?, forgetAlways?, forgetAlwaysKey?, listModels? }
 
 import 'dart:async';
 import 'dart:convert';
@@ -27,6 +31,8 @@ import '../island/controller.dart';
 import 'chat_runner.dart';
 import 'chat_service.dart';
 import 'chat_tools.dart';
+import 'journal.dart';
+import 'memory.dart';
 
 class RemoteServer {
   RemoteServer({
@@ -35,6 +41,8 @@ class RemoteServer {
     required this.chat,
     required this.tools,
     required this.version,
+    required this.journal,
+    required this.memory,
   });
 
   final AppState state;
@@ -42,6 +50,9 @@ class RemoteServer {
   final ChatService chat;
   final ChatTools tools;
   final String Function() version;
+  final Journal journal;
+  final LongTermMemory memory;
+  bool _journalListening = false;
 
   HttpServer? _server;
   int? port;
@@ -63,6 +74,10 @@ class RemoteServer {
       if (!_listening) {
         state.addListener(_onState);
         _listening = true;
+      }
+      if (!_journalListening) {
+        journal.addListener(_onState);
+        _journalListening = true;
       }
       _heartbeat = Timer.periodic(const Duration(seconds: 20), (_) => _broadcast(': ping\n\n'));
     } catch (e) {
@@ -87,6 +102,7 @@ class RemoteServer {
 
   void dispose() {
     if (_listening) state.removeListener(_onState);
+    if (_journalListening) journal.removeListener(_onState);
     stop();
   }
 
@@ -148,9 +164,32 @@ class RemoteServer {
             'cwd': s.cwd,
             'lastStep': s.steps.isEmpty ? null : s.steps.last.text,
             'lastMessage': s.lastMessage,
+            'prompt': s.prompt,
             'updated': s.updated.toIso8601String(),
+            'steps': [
+              for (final st in s.steps.reversed.take(30).toList().reversed)
+                {'kind': st.kind.name, 'text': st.text, if (st.detail != null) 'detail': st.detail, 'at': st.at.toIso8601String()},
+            ],
           },
       ],
+      'journal': [
+        for (final e in journal.newestFirst.take(60)) _entryJson(e),
+      ],
+      'conversations': [
+        for (final m in (state.conversations?.index ?? const []).take(30))
+          {'id': m.id, 'title': m.title, 'updated': m.updated.toIso8601String(), 'count': m.count},
+      ],
+      'settings': {
+        'model': state.settings.chatModel,
+        'effectiveModel': chat.effectiveModel,
+        'models': [for (final m in chat.models) m.id],
+        'workspace': state.settings.chatWorkspace,
+        'baseDir': tools.baseDir(),
+        'webSearch': state.settings.chatWebSearch,
+        'alwaysAllow': state.settings.alwaysAllow.toList()..sort(),
+        'configured': chat.configured,
+        'muted': state.settings.muted,
+      },
       'pending': a == null
           ? null
           : {
@@ -184,6 +223,17 @@ class RemoteServer {
       'quickActions': ChatTools.quickLabels,
     };
   }
+
+  static Map<String, dynamic> _entryJson(JournalEntry e) => {
+        'id': e.id,
+        'at': e.at.toIso8601String(),
+        'kind': e.kind.name,
+        'label': e.label,
+        if (e.detail != null) 'detail': e.detail,
+        if (e.path != null) 'path': e.path,
+        'canUndo': e.canUndo,
+        'undone': e.undone,
+      };
 
   static String _label(ApprovalInfo a) {
     switch (a.toolName) {
@@ -317,6 +367,70 @@ class RemoteServer {
           parsed = {'ok': true, 'output': out};
         }
         return await _json(res, parsed, status: out.startsWith('{"error"') ? 400 : 200);
+      }
+
+      // ── Journal ──
+      if (req.method == 'POST' && path == '/api/journal/undo') {
+        final b = await _body(req);
+        final e = journal.entries.where((x) => x.id == b['id']).firstOrNull;
+        if (e == null) return await _json(res, {'error': 'Entrée introuvable.'}, status: 404);
+        final err = await journal.undo(e);
+        return await _json(res, err == null ? {'ok': true} : {'error': err}, status: err == null ? 200 : 400);
+      }
+      if (req.method == 'POST' && path == '/api/journal/clear') {
+        await journal.clear();
+        return await _json(res, {'ok': true});
+      }
+
+      // ── Mémoire longue ──
+      if (req.method == 'GET' && path == '/api/memory') {
+        return await _json(res, {'text': await memory.read(), 'count': await memory.count(), 'path': await memory.path()});
+      }
+      if (req.method == 'POST' && path == '/api/memory') {
+        final b = await _body(req);
+        final text = b['text'];
+        if (text is! String) return await _json(res, {'error': 'text manquant'}, status: 400);
+        final p = await memory.path();
+        final backup = await journal.backupOf(p);
+        await (await memory.file()).writeAsString(text);
+        journal.record(kind: JournalKind.memory, label: 'Mémoire modifiée depuis le téléphone', path: p, backup: backup, created: backup == null);
+        return await _json(res, {'ok': true, 'count': await memory.count()});
+      }
+
+      // ── Conversations ──
+      if (req.method == 'GET' && path == '/api/conversations') {
+        final c = await state.conversations?.load(req.uri.queryParameters['id'] ?? '');
+        if (c == null) return await _json(res, {'error': 'introuvable'}, status: 404);
+        return await _json(res, c.toJson());
+      }
+      if (req.method == 'POST' && path == '/api/conversations/open') {
+        final b = await _body(req);
+        await state.openConversation('${b['id'] ?? ''}');
+        return await _json(res, {'ok': true});
+      }
+      if (req.method == 'POST' && path == '/api/conversations/delete') {
+        final b = await _body(req);
+        await state.deleteConversation('${b['id'] ?? ''}');
+        return await _json(res, {'ok': true});
+      }
+
+      // ── Réglages (ceux qui ont un sens à distance) ──
+      if (req.method == 'POST' && path == '/api/settings') {
+        final b = await _body(req);
+        final st = state.settings;
+        if (b['model'] is String) st.chatModel = (b['model'] as String).trim();
+        if (b['workspace'] is String) st.chatWorkspace = (b['workspace'] as String).trim();
+        if (b['webSearch'] is bool) st.chatWebSearch = b['webSearch'] as bool;
+        if (b['muted'] is bool) st.muted = b['muted'] as bool;
+        if (b['forgetAlways'] == true) st.alwaysAllow.clear();
+        if (b['forgetAlwaysKey'] is String) st.alwaysAllow.remove(b['forgetAlwaysKey']);
+        if (b['listModels'] == true) {
+          try {
+            await chat.listModels();
+          } catch (_) {}
+        }
+        state.saveSettingsSoon();
+        return await _json(res, {'ok': true, 'status': _status()});
       }
 
       if (req.method == 'GET' && path == '/api/screen.jpg') {

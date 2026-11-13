@@ -8,10 +8,11 @@ import 'layout.dart';
 enum StepKind { read, edit, run, search, note, prompt }
 
 class SessionStep {
-  SessionStep(this.kind, this.text, {this.detail});
+  SessionStep(this.kind, this.text, {this.detail}) : at = DateTime.now();
   final StepKind kind;
   final String text;
   final String? detail;
+  final DateTime at;
 }
 
 class Session {
