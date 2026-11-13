@@ -387,6 +387,7 @@ class IslandController extends ChangeNotifier {
     final tool = (p['tool_name'] ?? '') as String;
     final input = _map(p['tool_input']);
     final requestId = (p['request_id'] ?? '${DateTime.now().microsecondsSinceEpoch}') as String;
+    final cwd = (p['cwd'] ?? '') as String;
 
     final s = state.upsertSession(id, project, agent, cwd: cwd);
     _cancelStop(id);

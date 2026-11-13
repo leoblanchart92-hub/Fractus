@@ -228,7 +228,7 @@ ${tools.sessionsSummary()}''';
         final text = await res.stream.bytesToString();
         // Paramètre refusé (ex. reasoning_effort, tools) : on retente sans.
         if (res.statusCode == 400 && (useTools || _supportsReasoning) && _looksLikeParamError(text)) {
-          return _streamOnceBare(messages, onDelta);
+          return await _streamOnceBare(messages, onDelta);
         }
         throw Exception(_errorTextRaw(res.statusCode, text));
       }

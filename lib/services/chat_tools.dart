@@ -75,11 +75,11 @@ class ChatTools {
         case 'get_sessions':
           return sessionsJson();
         case 'read_file':
-          return _readFile(args);
+          return await _readFile(args);
         case 'list_directory':
-          return _listDirectory(args);
+          return await _listDirectory(args);
         case 'search_text':
-          return _searchText(args);
+          return await _searchText(args);
         case 'get_datetime':
           return jsonEncode({'now': DateTime.now().toIso8601String(), 'timezone': DateTime.now().timeZoneName});
         default:
