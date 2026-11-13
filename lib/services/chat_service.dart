@@ -311,7 +311,7 @@ ${tools.sessionsSummary()}''';
           final short = wait != null && wait <= 25;
           if (short && attempt <= 2) {
             // Petit délai annoncé : on patiente, puis on réessaie le même modèle.
-            onStatus?.call('Groq sature, nouvel essai dans ${wait!.ceil()} s');
+            onStatus?.call('Groq sature, nouvel essai dans ${wait.ceil()} s');
             await Future<void>.delayed(Duration(milliseconds: (wait * 1000).ceil() + 400));
             continue;
           }
