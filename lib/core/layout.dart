@@ -17,6 +17,7 @@ enum IslandView {
   settings,
   greeting,
   launch,
+  update,
 }
 
 enum BotState {
@@ -82,6 +83,7 @@ const Map<IslandView, ViewLayout> viewLayouts = {
   IslandView.settings: ViewLayout(height: 160, botX: 54, botDiameter: 46, agentMode: AgentLayoutMode.none),
   IslandView.greeting: ViewLayout(height: 150, botX: 320, botY: 90, botDiameter: 0, agentMode: AgentLayoutMode.none),
   IslandView.launch: ViewLayout(height: 160, botX: 58, botDiameter: 52, agentMode: AgentLayoutMode.none),
+  IslandView.update: ViewLayout(height: 160, botX: 62, botDiameter: 58, agentMode: AgentLayoutMode.none),
 };
 
 /// La vue question avec des choix : la place pour deux rangées.

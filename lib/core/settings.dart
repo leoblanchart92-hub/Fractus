@@ -21,6 +21,10 @@ class Settings {
   Set<String> alwaysAllow = {};
   /// Saluer (coucou de la main) au lancement.
   bool greetOnLaunch = true;
+  /// Démarrer Fractus avec Windows (clé Run du registre, par utilisateur).
+  bool launchAtStartup = true;
+  /// Chercher les nouvelles versions sur GitHub (au lancement puis toutes les 6 h).
+  bool autoUpdate = true;
 
   Map<String, dynamic> toJson() => {
         'openOnHover': openOnHover,
@@ -30,6 +34,8 @@ class Settings {
         'chatModel': chatModel,
         'alwaysAllow': alwaysAllow.toList(),
         'greetOnLaunch': greetOnLaunch,
+        'launchAtStartup': launchAtStartup,
+        'autoUpdate': autoUpdate,
       };
 
   static Settings fromJson(Map<String, dynamic> j) {
@@ -42,6 +48,8 @@ class Settings {
     final aa = j['alwaysAllow'];
     if (aa is List) s.alwaysAllow = aa.whereType<String>().toSet();
     s.greetOnLaunch = j['greetOnLaunch'] != false;
+    s.launchAtStartup = j['launchAtStartup'] != false;
+    s.autoUpdate = j['autoUpdate'] != false;
     return s;
   }
 

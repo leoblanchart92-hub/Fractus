@@ -305,7 +305,7 @@ class ConfusedView extends StatelessWidget {
         children: [
           Text('Ouille…', style: ui(15.5, weight: FontWeight.w700)),
           const SizedBox(height: 4),
-          Text('Trois tapes d\'un coup, Mochi a la tête qui tourne. Laisse-lui une seconde.',
+          Text('Trois tapes d\'un coup, Fractus a la tête qui tourne. Laisse-lui une seconde.',
               style: ui(12.5, color: Palette.dim)),
         ],
       ),

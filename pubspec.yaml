@@ -20,6 +20,12 @@ dependencies:
   http: ^1.2.0
   # Dossier de réglages (%APPDATA%\fractus).
   path_provider: ^2.1.0
+  # Icône dans la zone de notification (Fractus tourne en arrière-plan).
+  tray_manager: ^0.5.0
+  # Lancement automatique avec Windows (clé Run du registre).
+  launch_at_startup: ^0.5.1
+  # Version de l'application (pour les mises à jour).
+  package_info_plus: ^8.0.0
 
 dev_dependencies:
   flutter_test:
@@ -28,3 +34,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/fractus.ico

@@ -46,7 +46,7 @@ class AppState extends ChangeNotifier {
   /// La pastille mise en avant : celle du focus, sinon la plus récente.
   Session? get frontSession => focused ?? (orderedSessions.isEmpty ? null : orderedSessions.first);
 
-  /// L'état de Mochi, celui de la session en avant (ou idle).
+  /// L'état de Fractus, celui de la session en avant (ou idle).
   BotState get botState {
     if (pendingApproval != null) return pendingApproval!.isQuestion ? BotState.question : BotState.approval;
     final s = frontSession;

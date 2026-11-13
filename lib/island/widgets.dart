@@ -1,12 +1,12 @@
-// Les briques des vues : carte, pastille, mini Mochi, boutons, ligne de titre.
+// Les briques des vues : carte, pastille, mini Fractus, boutons, ligne de titre.
 
 import 'package:flutter/material.dart';
 
 import '../core/layout.dart';
 import '../core/models.dart';
 import '../core/theme.dart';
-import '../mochi/bot_engine.dart';
-import '../mochi/mochi_view.dart';
+import '../companion/bot_engine.dart';
+import '../companion/companion_view.dart';
 
 /// La carte sombre de l'île (#141518, rayon 20), avec sa teinte en bas.
 class IslandCard extends StatelessWidget {
@@ -179,7 +179,7 @@ class CodeChip extends StatelessWidget {
   }
 }
 
-/// Le mini Mochi d'une pastille : un aplat de couleur, les yeux, le badge.
+/// Le mini Fractus d'une pastille : un aplat de couleur, les yeux, le badge.
 class MiniBot extends StatefulWidget {
   const MiniBot({super.key, required this.color, required this.state, this.size = 20, this.badge = false});
   final Color color;
@@ -238,7 +238,7 @@ class _MiniBotState extends State<MiniBot> {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          MochiView(engine: _engine, size: s, glow: false),
+          CompanionView(engine: _engine, size: s, glow: false),
           if (widget.badge)
             Positioned(
               left: 0,
@@ -259,7 +259,7 @@ class _MiniBotState extends State<MiniBot> {
   }
 }
 
-/// Une pastille de session : mini Mochi + nom du projet, dans sa couleur.
+/// Une pastille de session : mini Fractus + nom du projet, dans sa couleur.
 class SessionPill extends StatefulWidget {
   const SessionPill({super.key, required this.session, required this.onTap, this.width});
   final Session session;

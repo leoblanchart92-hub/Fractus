@@ -1,7 +1,7 @@
 // La fenêtre : un panneau transparent de 720×320 collé en haut au centre de
 // l'écran, toujours au premier plan, absent de la barre des tâches. Elle laisse
 // passer la souris partout sauf sur l'île, et suit le curseur pour réveiller
-// l'île (bande de 240×6 en haut) et faire suivre le regard de Mochi.
+// l'île (bande de 240×6 en haut) et faire suivre le regard de Fractus.
 
 import 'dart:async';
 import 'dart:ui';
@@ -98,7 +98,7 @@ class WindowService {
           : rect.inflate(8).contains(local) || wake.contains(local);
       controller.pointerInside(inside);
 
-      // Le regard de Mochi suit le curseur, de près comme de loin.
+      // Le regard de Fractus suit le curseur, de près comme de loin.
       final bp = botPosition(state.mode, state.view, rect.height);
       final bx = rect.left + bp.cx;
       final by = rect.top + bp.cy;

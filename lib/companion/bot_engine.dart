@@ -1,7 +1,8 @@
-// Mochi — portage en Dart du BotEngine de Coucou
-// (NotchBuddy/Sources/App/BotEngine.swift → windows/src/mochi/engine.ts).
-// Mêmes constantes, mêmes tweens, mêmes courbes, mêmes particules.
-// Le personnage est dessiné en code, sans image : un Canvas et un ticker.
+// Fractus — le compagnon. Moteur d'animation dérivé de celui de Coucou
+// (windows/src/mochi/engine.ts, MIT) : mêmes tweens, courbes et particules.
+// Le personnage, lui, est un petit cristal (« fractus » = éclat, en latin) :
+// une gemme hexagonale aux angles adoucis, aux facettes translucides, avec les
+// mêmes grands yeux expressifs. Dessiné en code, sans image : un Canvas et un ticker.
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -79,14 +80,17 @@ class _Particle {
   double x, y, vx, vy, age, life, rot, size;
 }
 
-// ── Constantes (MochiConst) ───────────────────────────────────────────────────
+// ── Constantes (FractusConst) ───────────────────────────────────────────────────
 
 const double _eyeW = 0.25;
 const double _eyeH = 0.27;
 const double _eyeSp = 0.37;
 const double _eyeP = -0.12;
-const Color _baseTop = Color(0xFFEDEDEF);
-const Color _baseBottom = Color(0xFFC4C5CA);
+// Teintes du cristal au repos : un verre pâle, légèrement bleuté.
+const Color _baseTop = Color(0xFFF2F7FB);
+const Color _baseBottom = Color(0xFFB7CCE0);
+// Couleur d'accent de Fractus (la facette qui capte la lumière).
+const Color _accent = Color(0xFF38BDF8);
 const Color _ink = Color(0xFF1A1412);
 const Color _miniInk = Color(0xFF10131A);
 
@@ -215,7 +219,7 @@ class BotEngine extends ChangeNotifier {
 
   final bool isMini;
 
-  /// Couleur unie du corps pour les mini Mochis des pastilles (null = dégradé de Mochi).
+  /// Couleur unie du corps pour les mini Fractus des pastilles (null = dégradé de Fractus).
   Color? bodyColor;
 
   // État animé (BotEngine `s`)
@@ -654,7 +658,7 @@ class BotEngine extends ChangeNotifier {
     }
     if (state == BotState.dizzy) ty = math.sin(t * 9) * 0.25;
 
-    // Les mini Mochis ne suivent jamais la souris : ils regardent ailleurs.
+    // Les mini Fractus ne suivent jamais la souris : ils regardent ailleurs.
     if (isMini && cfg.look == null && !cfg.scans && state != BotState.sleeping && state != BotState.dizzy) {
       if (n > _miniLookNextTime) {
         _miniLookTarget = Offset(-0.88 + _rng.nextDouble() * 1.76, -0.55 + _rng.nextDouble() * 1.0);
@@ -825,31 +829,56 @@ class BotEngine extends ChangeNotifier {
     _drawParticles(x, R, cx, cy);
   }
 
+  /// Les six sommets de la gemme (pointe en haut et en bas, flancs droits),
+  /// dans l'ordre horaire à partir du sommet du haut.
+  List<Offset> _gemVertices(double rx, double ry) {
+    return [
+      Offset(0, -ry * 1.06),
+      Offset(rx * 0.98, -ry * 0.46),
+      Offset(rx * 0.98, ry * 0.46),
+      Offset(0, ry * 1.06),
+      Offset(-rx * 0.98, ry * 0.46),
+      Offset(-rx * 0.98, -ry * 0.46),
+    ];
+  }
+
+  /// Le contour : un hexagone aux angles adoucis (courbes entre les milieux
+  /// des côtés), pour garder le côté « doudou » malgré les facettes.
   Path _bodyPath(double rx, double ry, double R) {
-    const n = 72;
-    const expN = 2.0 / 2.7;
+    final v = _gemVertices(rx, ry);
+    const k = 0.34; // part de chaque côté adoucie autour du sommet
     final p = Path();
-    for (var i = 0; i <= n; i++) {
-      final a = (i / n) * math.pi * 2;
-      final ca = math.cos(a);
-      final sa = math.sin(a);
-      final px = rx * (ca >= 0 ? math.pow(ca, expN) : -math.pow(-ca, expN)).toDouble();
-      final py = ry * (sa >= 0 ? math.pow(sa, expN) : -math.pow(-sa, expN)).toDouble();
+    for (var i = 0; i < v.length; i++) {
+      final prev = v[(i - 1 + v.length) % v.length];
+      final cur = v[i];
+      final next = v[(i + 1) % v.length];
+      final a = Offset.lerp(cur, prev, k)!;
+      final b = Offset.lerp(cur, next, k)!;
       if (i == 0) {
-        p.moveTo(px, py);
+        p.moveTo(a.dx, a.dy);
       } else {
-        p.lineTo(px, py);
+        p.lineTo(a.dx, a.dy);
       }
+      p.quadraticBezierTo(cur.dx, cur.dy, b.dx, b.dy);
     }
     return p..close();
   }
 
   void _drawBody(ui.Canvas x, Path body, double R, double rx, double ry) {
     if (bodyColor != null) {
-      // Mini Mochis : aplat uni — pas de dégradé, pas de reflet.
+      // Mini Fractus : aplat uni — pas de dégradé, juste une facette claire.
       x.drawPath(body, Paint()..color = bodyColor!);
+      x.save();
+      x.clipPath(body);
+      x.drawPath(
+        _facet(rx, ry, 0),
+        Paint()..color = const Color(0x2EFFFFFF),
+      );
+      x.restore();
       return;
     }
+
+    // Le verre : clair en haut à droite, plus dense en bas à gauche.
     x.drawPath(
       body,
       Paint()
@@ -860,6 +889,7 @@ class BotEngine extends ChangeNotifier {
         ),
     );
 
+    // La teinte de l'état monte depuis le bas, comme une lumière dans la pierre.
     if (tint > 0.01) {
       x.drawPath(
         body,
@@ -871,6 +901,25 @@ class BotEngine extends ChangeNotifier {
           ),
       );
     }
+
+    // Les facettes : quatre triangles translucides qui partent du cœur.
+    x.save();
+    x.clipPath(body);
+    x.drawPath(_facet(rx, ry, 0), Paint()..color = const Color(0x40FFFFFF)); // haut-gauche : lumière
+    x.drawPath(_facet(rx, ry, 1), Paint()..color = _accent.withValues(alpha: 0.10 + 0.08 * (1 - tint))); // haut-droite : accent
+    x.drawPath(_facet(rx, ry, 2), Paint()..color = const Color(0x12000000)); // bas-droite : ombre
+    x.drawPath(_facet(rx, ry, 3), Paint()..color = const Color(0x1F000000)); // bas-gauche : ombre dense
+    // Les arêtes, à peine marquées.
+    final edges = Paint()
+      ..color = const Color(0x38FFFFFF)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = math.max(0.8, R * 0.035);
+    final v = _gemVertices(rx, ry);
+    final heart = Offset(-rx * 0.08, ry * 0.08);
+    for (final i in [1, 2, 4, 5]) {
+      x.drawLine(heart, Offset.lerp(heart, v[i], 0.92)!, edges);
+    }
+    x.restore();
 
     // Ombre vers les bords.
     x.drawPath(
@@ -894,6 +943,38 @@ class BotEngine extends ChangeNotifier {
           [const Color(0x8CFFFFFF), const Color(0x00FFFFFF)],
         ),
     );
+
+    // Le liseré : un fin contour qui fait « verre ».
+    x.drawPath(
+      body,
+      Paint()
+        ..color = const Color(0x33FFFFFF)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = math.max(0.8, R * 0.04),
+    );
+  }
+
+  /// Une facette : le triangle (cœur, sommet i, sommet i+1) d'un des quatre
+  /// quadrants — 0 haut-gauche, 1 haut-droite, 2 bas-droite, 3 bas-gauche.
+  Path _facet(double rx, double ry, int quadrant) {
+    final v = _gemVertices(rx, ry);
+    final heart = Offset(-rx * 0.08, ry * 0.08);
+    final List<Offset> pts;
+    switch (quadrant) {
+      case 0:
+        pts = [heart, v[5], v[0]];
+      case 1:
+        pts = [heart, v[0], v[1]];
+      case 2:
+        pts = [heart, v[2], v[3]];
+      default:
+        pts = [heart, v[3], v[4]];
+    }
+    return Path()
+      ..moveTo(pts[0].dx, pts[0].dy)
+      ..lineTo(pts[1].dx, pts[1].dy)
+      ..lineTo(pts[2].dx, pts[2].dy)
+      ..close();
   }
 
   void _drawEyes(ui.Canvas x, Path body, double R, double rx, double ry) {

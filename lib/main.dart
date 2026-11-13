@@ -14,7 +14,12 @@ import 'island/island_widget.dart';
 import 'services/chat_service.dart';
 import 'services/demo.dart';
 import 'services/hook_server.dart';
+import 'services/startup_service.dart';
+import 'services/tray_service.dart';
+import 'services/update_service.dart';
 import 'services/window_service.dart';
+
+late TrayService tray;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,6 +36,34 @@ Future<void> main() async {
     chat.apiKey = state.settings.anthropicApiKey;
     chat.model = state.settings.chatModel;
   });
+  final startup = StartupService();
+  final updates = UpdateService(autoCheck: settings.autoUpdate);
+
+  Future<void> quit() async {
+    demo.stop();
+    await hooks.stop();
+    await tray.stop();
+    await window.quit();
+  }
+
+  tray = TrayService(
+    state: state,
+    controller: controller,
+    onCheckUpdates: () {
+      controller.open(IslandView.update);
+      updates.check();
+    },
+    onQuit: quit,
+  );
+
+  // Une nouvelle version : l'île s'ouvre sur la carte de mise à jour.
+  updates.onAvailable = (_) => controller.alert(IslandView.update);
+  // Avant l'installateur : on coupe le serveur et l'icône, la fenêtre suit.
+  updates.onBeforeInstall = () async {
+    demo.stop();
+    await hooks.stop();
+    await tray.stop();
+  };
 
   runApp(FractusApp(
     state: state,
@@ -39,13 +72,20 @@ Future<void> main() async {
     hooks: hooks,
     demo: demo,
     chat: chat,
+    updates: updates,
+    onQuit: quit,
+    onStartupChanged: startup.apply,
   ));
 
   await window.show();
   await hooks.start(settings.hookPort);
+  await tray.start();
+  await startup.init();
+  await startup.apply(settings.launchAtStartup);
+  await updates.init();
   state.touch();
 
-  // Le salut au lancement : Mochi sort, fait coucou, puis se retire.
+  // Le salut au lancement : Fractus sort, fait coucou, puis se retire.
   if (settings.greetOnLaunch) {
     Timer(const Duration(milliseconds: 600), () {
       controller.open(IslandView.greeting);
@@ -70,6 +110,9 @@ class FractusApp extends StatelessWidget {
     required this.hooks,
     required this.demo,
     required this.chat,
+    required this.updates,
+    required this.onQuit,
+    required this.onStartupChanged,
   });
 
   final AppState state;
@@ -78,6 +121,9 @@ class FractusApp extends StatelessWidget {
   final HookServer hooks;
   final Demo demo;
   final ChatService chat;
+  final UpdateService updates;
+  final Future<void> Function() onQuit;
+  final ValueChanged<bool> onStartupChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -108,15 +154,13 @@ class FractusApp extends StatelessWidget {
             demo.start();
             controller.open(state.defaultView());
           },
-          onQuit: () async {
-            demo.stop();
-            await hooks.stop();
-            await window.quit();
-          },
+          onQuit: onQuit,
           onRestartHooks: () async {
             await hooks.start(state.settings.hookPort);
             state.touch();
           },
+          updates: updates,
+          onStartupChanged: onStartupChanged,
         ),
       ),
     );

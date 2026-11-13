@@ -1,4 +1,4 @@
-// L'île : l'enveloppe noire collée en haut de l'écran, son en-tête, Mochi,
+// L'île : l'enveloppe noire collée en haut de l'écran, son en-tête, Fractus,
 // et la vue du moment. Pendant de windows/src/island/island.ts (la partie vue).
 
 import 'dart:math' as math;
@@ -11,13 +11,15 @@ import '../core/layout.dart';
 import '../core/models.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
-import '../mochi/mochi_view.dart';
+import '../companion/companion_view.dart';
 import '../services/chat_service.dart';
+import '../services/update_service.dart';
 import 'controller.dart';
 import 'views/cards.dart';
 import 'views/chat.dart';
 import 'views/overview.dart';
 import 'views/settings.dart';
+import 'views/update.dart';
 import 'widgets.dart';
 
 class IslandWidget extends StatefulWidget {
@@ -31,6 +33,8 @@ class IslandWidget extends StatefulWidget {
     required this.onDemo,
     required this.onQuit,
     required this.onRestartHooks,
+    required this.updates,
+    required this.onStartupChanged,
   });
 
   final AppState state;
@@ -41,6 +45,8 @@ class IslandWidget extends StatefulWidget {
   final VoidCallback onDemo;
   final VoidCallback onQuit;
   final VoidCallback onRestartHooks;
+  final UpdateService updates;
+  final ValueChanged<bool> onStartupChanged;
 
   @override
   State<IslandWidget> createState() => _IslandWidgetState();
@@ -167,10 +173,10 @@ class _IslandWidgetState extends State<IslandWidget> {
                         if (mode == IslandMode.expanded && view != IslandView.greeting)
                           Positioned(left: 0, width: size.width, top: 0, height: 34, child: _header(view)),
 
-                        // ── Les mini Mochis de l'île compacte ──────────────
+                        // ── Les mini Fractus de l'île compacte ──────────────
                         if (mode == IslandMode.compact) ..._compactMinis(size.width),
 
-                        // ── Mochi ──────────────────────────────────────────
+                        // ── Fractus ──────────────────────────────────────────
                         AnimatedPositioned(
                           duration: duration,
                           curve: curve,
@@ -196,7 +202,7 @@ class _IslandWidgetState extends State<IslandWidget> {
                                           c.slapBot();
                                         }
                                       },
-                                      child: MochiView(engine: c.bot, size: botD),
+                                      child: CompanionView(engine: c.bot, size: botD),
                                     ),
                                   ),
                           ),
@@ -314,6 +320,17 @@ class _IslandWidgetState extends State<IslandWidget> {
           onDemo: widget.onDemo,
           onQuit: widget.onQuit,
           onRestartHooks: widget.onRestartHooks,
+          updates: widget.updates,
+          onStartupChanged: widget.onStartupChanged,
+        );
+      case IslandView.update:
+        return UpdateView(
+          updates: widget.updates,
+          onLater: () {
+            widget.updates.snooze();
+            state.setView(state.defaultView());
+            c.close();
+          },
         );
       case IslandView.greeting:
         return const GreetingView();

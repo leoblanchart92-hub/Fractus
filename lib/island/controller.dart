@@ -1,5 +1,5 @@
 // Le chef d'orchestre de l'île : reçoit les événements des agents, décide de
-// la vue, de l'état de Mochi, des alertes ; répond aux clics des cartes.
+// la vue, de l'état de Fractus, des alertes ; répond aux clics des cartes.
 // Pendant de windows/src/island/hooks.ts + island.ts (la partie logique).
 
 import 'dart:async';
@@ -9,7 +9,7 @@ import 'package:flutter/foundation.dart';
 import '../core/layout.dart';
 import '../core/models.dart';
 import '../core/state.dart';
-import '../mochi/bot_engine.dart';
+import '../companion/bot_engine.dart';
 import '../services/sound.dart';
 
 class IslandController extends ChangeNotifier {
@@ -110,7 +110,7 @@ class IslandController extends ChangeNotifier {
     Sound.play(v.name, muted: state.settings.muted);
   }
 
-  // ── Mochi ──────────────────────────────────────────────────────────────────
+  // ── Fractus ──────────────────────────────────────────────────────────────────
 
   void _syncBot() {
     final target = state.botState;
@@ -144,7 +144,7 @@ class IslandController extends ChangeNotifier {
 
   Timer? _hoverTimer;
 
-  /// Le regard : coordonnées normalisées (−1…1) par rapport au centre de Mochi.
+  /// Le regard : coordonnées normalisées (−1…1) par rapport au centre de Fractus.
   void look(double x, double y) {
     bot.lookX = x.clamp(-1, 1);
     bot.lookY = y.clamp(-1, 1);

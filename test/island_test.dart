@@ -7,8 +7,10 @@ import 'package:fractus/core/models.dart';
 import 'package:fractus/core/settings.dart';
 import 'package:fractus/core/state.dart';
 import 'package:fractus/island/controller.dart';
+import 'package:fractus/services/update_service.dart';
 
 void main() {
+  _versionTests();
   test('la géométrie de l\'île est celle de Coucou', () {
     expect(islandSize(IslandMode.hidden, IslandView.empty), const Size(184, 0));
     expect(islandSize(IslandMode.compact, IslandView.empty), const Size(288, 32));
@@ -98,5 +100,15 @@ void main() {
     expect(decision['behavior'], 'allow');
     expect(decision['updatedInput']['answers']['Quel moteur ?'], 'Algolia');
     c.dispose();
+  });
+}
+
+void _versionTests() {
+  test('la comparaison de versions suit le semver', () {
+    expect(UpdateService.compareVersions('0.2.0', '0.1.0'), greaterThan(0));
+    expect(UpdateService.compareVersions('0.1.0', '0.1.0+1'), 0);
+    expect(UpdateService.compareVersions('1.0.0', '0.9.9'), greaterThan(0));
+    expect(UpdateService.compareVersions('0.2.0-beta', '0.2.0'), lessThan(0));
+    expect(UpdateService.compareVersions('0.1.0', '0.1.1'), lessThan(0));
   });
 }

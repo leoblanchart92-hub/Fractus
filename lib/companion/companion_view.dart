@@ -6,8 +6,8 @@ import 'package:flutter/scheduler.dart';
 import '../core/layout.dart';
 import 'bot_engine.dart';
 
-class MochiView extends StatefulWidget {
-  const MochiView({
+class CompanionView extends StatefulWidget {
+  const CompanionView({
     super.key,
     required this.engine,
     required this.size,
@@ -23,10 +23,10 @@ class MochiView extends StatefulWidget {
   final double? glowOpacity;
 
   @override
-  State<MochiView> createState() => _MochiViewState();
+  State<CompanionView> createState() => _CompanionViewState();
 }
 
-class _MochiViewState extends State<MochiView> with SingleTickerProviderStateMixin {
+class _CompanionViewState extends State<CompanionView> with SingleTickerProviderStateMixin {
   late final Ticker _ticker;
   Duration _last = Duration.zero;
 

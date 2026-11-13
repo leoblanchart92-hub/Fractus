@@ -10,7 +10,8 @@ Un petit compagnon qui vit en haut de l'écran et garde un œil sur vos agents d
 
 Application **Windows** écrite en **Flutter**. L'interface reprend celle de
 [Coucou](https://github.com/Louis-CFM/coucou) de Louis Raillé (Louis-CFM) : l'île en haut
-de l'écran, Mochi, les pastilles, les cartes de permission, de question et de fin, le chat.
+de l'écran, les pastilles, les cartes de permission, de question et de fin, le chat. Le compagnon,
+lui, s'appelle **Fractus** : un petit cristal aux grands yeux.
 
 </div>
 
@@ -22,20 +23,45 @@ de l'écran, Mochi, les pastilles, les cartes de permission, de question et de f
   rien, elle sort quand le pointeur touche le bord haut (bande de 240 × 6 px), s'ouvre au clic
   (ou au survol, dans les réglages) et se replie quand le pointeur s'en va. Tailles, rayons,
   courbes d'ouverture (`cubic-bezier(.32,1.22,.42,1)`, 520 ms) et de fermeture (340 ms) sont celles de Coucou.
-- 🫧 **Mochi** — le petit squircle aux grands yeux, dessiné en code (aucune image) : respiration,
+- 💎 **Fractus** — un petit cristal aux grands yeux (« fractus » : éclat, en latin), dessiné en code
+  (aucune image) : respiration,
   clignements, regard qui suit la souris, états `idle / working / thinking / searching / approval /
   question / error / finished / ratelimit / sleeping / dizzy`, badges, particules (étoiles, cœurs,
   sueur, z), le salut de la main au lancement, l'agacement quand on le tape (trois tapes : étourdi),
-  les cœurs quand on reste sur lui deux secondes. Portage du `BotEngine` de Coucou.
-- 🤖 **Les sessions en direct** — chaque session Claude Code a sa pastille colorée et son mini Mochi ;
+  les cœurs quand on reste sur lui deux secondes. Le moteur d'animation est un portage du `BotEngine` de Coucou.
+- 🤖 **Les sessions en direct** — chaque session Claude Code a sa pastille colorée et son mini Fractus ;
   la carte montre le projet, l'agent et les dernières étapes (lecture, modification, commande, recherche).
 - ✅ **Permissions et questions** — `PermissionRequest` s'affiche avec **Refuser (N) / Autoriser (Y) /
   Toujours** ; `AskUserQuestion` montre ses choix (jusqu'à 4 questions, sélection multiple).
   Jamais rien d'autorisé sans un clic ; sans réponse, le terminal reprend la main.
-- 🎉 **Terminé / erreur** — Mochi fait sa roulade, la carte verte résume la réponse.
+- 🎉 **Terminé / erreur** — Fractus fait sa roulade, la carte verte résume la réponse.
 - 💬 **Chat** — avec Claude via votre propre clé Anthropic (Réglages → Chat), qui voit vos sessions en cours.
-- ⚙️ **Réglages dans l'île** — survol, son, port des hooks, clé API, démo, quitter.
-- 🔒 **Privé** — aucune télémétrie, aucun compte. Le serveur de hooks n'écoute que sur `127.0.0.1`.
+- ⚙️ **Réglages dans l'île** — survol, son, lancement avec Windows, port des hooks, clé API, mises à jour, démo, quitter.
+- 🫥 **En arrière-plan** — pas de fenêtre dans la barre des tâches : une icône dans la zone de
+  notification (clic gauche : ouvrir l'île ; clic droit : réglages, mises à jour, quitter) et, par
+  défaut, un lancement automatique avec Windows (désactivable dans les réglages).
+- 🔄 **Mises à jour** — Fractus regarde les Releases GitHub au lancement puis toutes les 6 h ; quand
+  une nouvelle version existe, l'île s'ouvre sur une carte **Installer / Plus tard**. L'installateur
+  se télécharge, se lance en silencieux, remplace les fichiers et relance Fractus.
+- 🔒 **Privé** — aucune télémétrie, aucun compte. Le serveur de hooks n'écoute que sur `127.0.0.1` ;
+  la seule requête sortante hors chat est le contrôle de version sur `api.github.com`.
+
+## Installer (Windows)
+
+Téléchargez **`Fractus-Setup-x.y.z.exe`** dans les [Releases](https://github.com/leoblanchart92-hub/Fractus/releases)
+et lancez-le : installation par utilisateur (`%LOCALAPPDATA%\Programs\Fractus`), sans droits
+administrateur, raccourci dans le menu Démarrer. Il y a aussi un zip portable (`Fractus-Windows.zip`).
+
+Chaque push est compilé par GitHub Actions (`.github/workflows/windows.yml`) ; les fichiers sont dans
+l'onglet *Actions → run → Artifacts*. Un tag `vX.Y.Z` (égal au `version:` de `pubspec.yaml`) publie une
+Release avec l'installateur, que les Fractus déjà installés proposeront d'installer.
+
+## La clé API (chat)
+
+Le chat utilise votre propre clé Anthropic. Ouvrez l'île → ⚙️ **Réglages** → section **Chat** →
+collez la clé (`sk-ant-…`) → **Enregistrer**. Elle est écrite dans
+`%APPDATA%\fractus\settings.json` (champ `anthropicApiKey`) et ne quitte la machine que vers
+`api.anthropic.com` quand vous envoyez un message. Vous pouvez aussi éditer ce fichier à la main.
 
 ## Construire et lancer (Windows)
 
@@ -50,7 +76,7 @@ flutter run -d windows        # pour développer
 flutter build windows --release   # l'exécutable : build\windows\x64\runner\Release\fractus.exe
 ```
 
-Au premier lancement, Mochi sort de l'île et fait coucou. Comme aucune session ne tourne encore,
+Au premier lancement, Fractus sort de l'île et fait coucou. Comme aucune session ne tourne encore,
 ouvrez l'île (bord haut de l'écran, puis clic) : **Jouer la démo** rejoue le scénario des captures de
 Coucou (Korus, SBE Hub, Morning Brief, Publication IG) avec une permission, une question et une fin.
 
@@ -65,18 +91,21 @@ dans `%USERPROFILE%\.claude\settings.json`.
 | Dossier | Contenu |
 |---|---|
 | `lib/core/` | géométrie de l'île (`layout.dart`), palette (`theme.dart`), modèles, état, réglages |
-| `lib/mochi/` | `bot_engine.dart` (le personnage, portage de `BotEngine`), `mochi_view.dart` (ticker + CustomPaint) |
+| `lib/companion/` | `bot_engine.dart` (le personnage et son moteur d'animation), `companion_view.dart` (ticker + CustomPaint) |
 | `lib/island/` | l'île (`island_widget.dart`), sa logique (`controller.dart`), les briques (`widgets.dart`) et les vues |
-| `lib/services/` | fenêtre transparente toujours au premier plan, serveur de hooks, démo, chat, sons |
+| `lib/services/` | fenêtre transparente, icône de notification, lancement auto, mises à jour, serveur de hooks, démo, chat, sons |
+| `installer/` | le script Inno Setup de `Fractus-Setup-x.y.z.exe` |
 | `hook/` | le relais PowerShell pour Claude Code et l'exemple de `settings.json` |
 | `windows/` | le runner natif Flutter (CMake, Win32) |
 
 Dépendances : `window_manager`, `screen_retriever`, `flutter_acrylic` (fenêtre sans bordure,
-transparente, hors barre des tâches, curseur global), `http`, `path_provider`.
+transparente, hors barre des tâches, curseur global), `tray_manager`, `launch_at_startup`,
+`package_info_plus`, `http`, `path_provider`.
 
 ## Différences avec Coucou
 
-Fractus reprend l'**interface** de Coucou, pas son écosystème : pas d'iPhone/Android, pas
+Fractus reprend l'**interface** de Coucou (pas le personnage Mochi, remplacé par le cristal Fractus),
+pas son écosystème : pas d'iPhone/Android, pas
 d'intégrations Stripe/GitHub/Vercel, pas de dictée, pas de garde-robe, pas de Spotify. Les sons ne
 sont pas inclus (voir `lib/services/sound.dart` pour brancher les vôtres).
 

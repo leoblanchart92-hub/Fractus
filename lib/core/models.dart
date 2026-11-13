@@ -31,7 +31,7 @@ class Session {
   String? prompt;
   String? lastMessage;
   DateTime updated = DateTime.now();
-  /// Nombre d'alertes en attente sur cette pastille (point sur le mini Mochi).
+  /// Nombre d'alertes en attente sur cette pastille (point sur le mini Fractus).
   bool badge = false;
 
   bool get isActive => state == BotState.working || state == BotState.thinking || state == BotState.searching;

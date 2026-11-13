@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/state.dart';
 import '../../core/theme.dart';
+import '../../services/update_service.dart';
 import '../controller.dart';
 import '../widgets.dart';
 
@@ -18,6 +19,8 @@ class SettingsView extends StatefulWidget {
     required this.onDemo,
     required this.onQuit,
     required this.onRestartHooks,
+    required this.updates,
+    required this.onStartupChanged,
   });
   final AppState state;
   final IslandController controller;
@@ -26,6 +29,8 @@ class SettingsView extends StatefulWidget {
   final VoidCallback onDemo;
   final VoidCallback onQuit;
   final VoidCallback onRestartHooks;
+  final UpdateService updates;
+  final ValueChanged<bool> onStartupChanged;
 
   @override
   State<SettingsView> createState() => _SettingsViewState();
@@ -70,6 +75,11 @@ class _SettingsViewState extends State<SettingsView> {
             _toggle('Saluer au lancement', s.greetOnLaunch, (v) {
               s.greetOnLaunch = v;
               widget.state.saveSettingsSoon();
+            }),
+            _toggle('Lancer Fractus avec Windows', s.launchAtStartup, (v) {
+              s.launchAtStartup = v;
+              widget.state.saveSettingsSoon();
+              widget.onStartupChanged(v);
             }),
             _section('Agents'),
             Row(
@@ -160,6 +170,51 @@ class _SettingsViewState extends State<SettingsView> {
             ),
             Text('La clé reste sur cette machine (settings.json). Rien n\'est envoyé sans ton message.',
                 style: ui(11, color: Palette.dim3)),
+            _section('Mises à jour'),
+            _toggle('Chercher les mises à jour automatiquement', s.autoUpdate, (v) {
+              s.autoUpdate = v;
+              widget.state.saveSettingsSoon();
+              widget.updates.setAutoCheck(v);
+            }),
+            AnimatedBuilder(
+              animation: widget.updates,
+              builder: (context, _) {
+                final u = widget.updates;
+                final String txt;
+                switch (u.status) {
+                  case UpdateStatus.checking:
+                    txt = 'Recherche…';
+                  case UpdateStatus.upToDate:
+                    txt = 'Fractus ${u.currentVersion} — à jour';
+                  case UpdateStatus.available:
+                    txt = 'Fractus ${u.available?.version} disponible';
+                  case UpdateStatus.downloading:
+                    txt = 'Téléchargement ${(u.progress * 100).round()} %';
+                  case UpdateStatus.installing:
+                    txt = 'Installation…';
+                  case UpdateStatus.error:
+                    txt = u.error ?? 'Échec';
+                  case UpdateStatus.idle:
+                    txt = 'Fractus ${u.currentVersion}';
+                }
+                return Row(
+                  children: [
+                    Expanded(
+                      child: Text(txt,
+                          style: ui(12, color: u.status == UpdateStatus.error ? Palette.redText : Palette.dim)),
+                    ),
+                    if (u.status == UpdateStatus.available)
+                      IslandButton(label: 'Installer', compact: true, primary: true, onTap: u.install)
+                    else
+                      IslandButton(
+                        label: 'Vérifier',
+                        compact: true,
+                        onTap: u.status == UpdateStatus.checking ? () {} : () => u.check(),
+                      ),
+                  ],
+                );
+              },
+            ),
             _section('Fractus'),
             Row(
               children: [
