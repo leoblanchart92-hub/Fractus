@@ -49,6 +49,11 @@ lui, s'appelle **Fractus** : un petit cristal aux grands yeux.
   `memoire.md`, relue à chaque conversation, que Fractus enrichit lui-même (`remember` / `forget`, sous
   permission) et que vous pouvez éditer à la main ; et un **journal d'activité** (onglet ⟲) qui liste
   tout ce qu'il a fait, avec une copie de chaque fichier avant modification et un bouton **Annuler**.
+- 📱 **Fractus sur le téléphone** (0.7, Android) — l'appli `Fractus-Android.apk` (dans chaque Release) se connecte
+  au PC sur le réseau local : état de Fractus et des autres agents en direct, **Autoriser / Refuser / Toujours**
+  à distance (et réponses aux questions), chat avec Fractus (il agit sur le PC), **écran du PC** en direct,
+  actions rapides (verrouiller, veille, son, volume, lecture). Deux **widgets d'écran d'accueil** : boutons, et
+  état + demande en attente + dernière réponse. Appairage par adresse + code (Réglages → Téléphone sur le PC).
 - 🌌 **Thème Aurora** — noir bleuté profond, surfaces teintées, accent cyan → violet en dégradé sur les
   boutons et en lueur diffuse derrière les cartes.
 - ⚙️ **Réglages dans l'île** — survol, son, lancement avec Windows, port des hooks, clé API, mises à jour, quitter.
@@ -60,6 +65,20 @@ lui, s'appelle **Fractus** : un petit cristal aux grands yeux.
   se télécharge, se lance en silencieux, remplace les fichiers et relance Fractus.
 - 🔒 **Privé** — aucune télémétrie, aucun compte. Le serveur de hooks n'écoute que sur `127.0.0.1` ;
   la seule requête sortante hors chat est le contrôle de version sur `api.github.com`.
+
+## Le téléphone (Android)
+
+1. Sur le PC : Fractus → ⚙️ Réglages → **Téléphone** → active « Autoriser le contrôle depuis le téléphone ».
+   L'adresse (`192.168.x.x:7790`) et le code (`XXXX-XXXX`) s'affichent. Si le téléphone ne se connecte pas,
+   clique **Pare-feu** une fois (ouvre le port sur les réseaux privés, demande les droits administrateur).
+2. Sur le téléphone : installe `Fractus-Android.apk` (Release GitHub ; autoriser les sources inconnues),
+   Réglages → entre l'adresse et le code → **Enregistrer**.
+3. Depuis l'extérieur : [Tailscale](https://tailscale.com) sur le PC et le téléphone, puis l'adresse Tailscale
+   du PC (`100.x.x.x:7790`). Pas de serveur relais : rien ne transite ailleurs que entre tes deux appareils.
+
+Le serveur « téléphone » (`lib/services/remote_server.dart`) n'écoute que si l'option est active, exige le code
+à chaque requête, et consigne les actions rapides dans le journal. Le code source de l'appli est dans `mobile/`
+(Flutter ; le squelette Android est généré par `flutter create` sur la CI).
 
 ## Installer (Windows)
 
@@ -134,7 +153,8 @@ dans `%USERPROFILE%\.claude\settings.json`.
 | `lib/core/` | géométrie de l'île (`layout.dart`), palette (`theme.dart`), modèles, état, réglages |
 | `lib/companion/` | `bot_engine.dart` (le personnage et son moteur d'animation), `companion_view.dart` (ticker + CustomPaint) |
 | `lib/island/` | l'île (`island_widget.dart`), sa logique (`controller.dart`), les briques (`widgets.dart`) et les vues |
-| `lib/services/` | fenêtre transparente, icône de notification, lancement auto, mises à jour, serveur de hooks, chat + outils de l'agent, sons |
+| `lib/services/` | fenêtre transparente, icône de notification, lancement auto, mises à jour, serveur de hooks, serveur téléphone, chat + outils de l'agent, mémoire, journal, sons |
+| `mobile/` | l'appli Android (Flutter) : état, permissions, chat, écran, actions rapides, widgets |
 | `installer/` | le script Inno Setup de `Fractus-Setup-x.y.z.exe` |
 | `hook/` | le relais PowerShell pour Claude Code et l'exemple de `settings.json` |
 | `windows/` | le runner natif Flutter (CMake, Win32) |
