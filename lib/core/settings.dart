@@ -14,14 +14,12 @@ class Settings {
   bool muted = false;
   /// Port local du serveur de hooks (l'agent y poste ses événements).
   int hookPort = 7788;
-  /// Fournisseur du chat : groq (défaut), openai (ou compatible), anthropic.
-  String chatProvider = 'groq';
-  /// Clé API du fournisseur choisi (vide = chat désactivé).
+  /// Clé API Groq (gsk_…) pour le chat (vide = chat désactivé).
   String chatApiKey = '';
-  /// Modèle (vide = celui proposé par défaut pour le fournisseur).
+  /// Modèle Groq (vide = le plus capable disponible sur le compte, choisi automatiquement).
   String chatModel = '';
-  /// URL de base personnalisée pour un serveur compatible OpenAI (vide = officielle).
-  String chatBaseUrl = '';
+  /// Recherche web et exécution de code côté Groq (modèle groq/compound).
+  bool chatWebSearch = false;
   /// Permissions « Toujours autoriser » : "tool|commande" → vrai.
   Set<String> alwaysAllow = {};
   /// Saluer (coucou de la main) au lancement.
@@ -35,10 +33,9 @@ class Settings {
         'openOnHover': openOnHover,
         'muted': muted,
         'hookPort': hookPort,
-        'chatProvider': chatProvider,
         'chatApiKey': chatApiKey,
         'chatModel': chatModel,
-        'chatBaseUrl': chatBaseUrl,
+        'chatWebSearch': chatWebSearch,
         'alwaysAllow': alwaysAllow.toList(),
         'greetOnLaunch': greetOnLaunch,
         'launchAtStartup': launchAtStartup,
@@ -50,16 +47,13 @@ class Settings {
     s.openOnHover = j['openOnHover'] == true;
     s.muted = j['muted'] == true;
     s.hookPort = (j['hookPort'] is int) ? j['hookPort'] as int : 7788;
-    s.chatProvider = (j['chatProvider'] ?? 'groq') as String;
     s.chatApiKey = (j['chatApiKey'] ?? '') as String;
-    s.chatModel = (j['chatModel'] ?? '') as String;
-    s.chatBaseUrl = (j['chatBaseUrl'] ?? '') as String;
-    // Anciens réglages (clé Anthropic seule) : on bascule sur Anthropic.
-    final legacy = (j['anthropicApiKey'] ?? '') as String;
-    if (s.chatApiKey.isEmpty && legacy.isNotEmpty) {
-      s.chatApiKey = legacy;
-      s.chatProvider = 'anthropic';
-    }
+    // Un ancien réglage d'un autre fournisseur ne vaut rien chez Groq : on repart à vide.
+    if (!s.chatApiKey.startsWith('gsk_')) s.chatApiKey = '';
+    // Un modèle d'un autre fournisseur (claude-…, gpt-4o…) n'existe pas chez Groq.
+    final m = (j['chatModel'] ?? '') as String;
+    s.chatModel = (m.startsWith('claude') || m.startsWith('gpt-4') || m.startsWith('gpt-5')) ? '' : m;
+    s.chatWebSearch = j['chatWebSearch'] == true;
     final aa = j['alwaysAllow'];
     if (aa is List) s.alwaysAllow = aa.whereType<String>().toSet();
     s.greetOnLaunch = j['greetOnLaunch'] != false;

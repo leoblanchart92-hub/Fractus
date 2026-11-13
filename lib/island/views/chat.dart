@@ -45,28 +45,36 @@ class _ChatViewState extends State<ChatView> {
     super.dispose();
   }
 
-  String _context() {
-    final b = StringBuffer();
-    for (final s in widget.state.orderedSessions.take(4)) {
-      b.writeln('- ${s.project} (${s.agent}) : ${s.state.name}'
-          '${s.steps.isNotEmpty ? ' — ${s.steps.last.text}' : ''}');
-    }
-    return b.toString();
-  }
-
   Future<void> _send() async {
     final t = _text.text.trim();
     if (t.isEmpty || widget.state.chatBusy) return;
     _text.clear();
     widget.state.addChat(ChatMessage('user', t));
+    final reply = ChatMessage('assistant', '…');
+    widget.state.addChat(reply);
     widget.state.chatBusy = true;
     widget.state.touch();
     _scrollDown();
+    var streamed = false;
     try {
-      final reply = await widget.chat.send(widget.state.chat, context: _context());
-      widget.state.addChat(ChatMessage('assistant', reply.isEmpty ? '…' : reply));
+      final text = await widget.chat.send(
+        widget.state.chat.where((m) => !identical(m, reply)).toList(),
+        onDelta: (partial) {
+          streamed = true;
+          reply.text = partial;
+          widget.state.touch();
+          _scrollDown();
+        },
+        onStatus: (status) {
+          if (!streamed) {
+            reply.text = '⟡ $status…';
+            widget.state.touch();
+          }
+        },
+      );
+      reply.text = text.isEmpty ? '…' : text;
     } catch (e) {
-      widget.state.addChat(ChatMessage('assistant', 'Impossible de joindre le modèle : $e'));
+      reply.text = 'Impossible de joindre Groq : $e';
     } finally {
       widget.state.chatBusy = false;
       widget.state.touch();
@@ -96,8 +104,8 @@ class _ChatViewState extends State<ChatView> {
                       padding: const EdgeInsets.only(bottom: 8, left: 6),
                       child: Text(
                         widget.chat.configured
-                            ? 'Pose une question à ${widget.chat.provider.assistantName} : il voit tes sessions en cours.'
-                            : 'Ajoute ta clé ${widget.chat.provider.label} dans les réglages pour discuter.',
+                            ? 'Demande-moi n\'importe quoi : je vois tes sessions et je peux lire tes projets.'
+                            : 'Ajoute ta clé Groq dans les réglages pour discuter.',
                         style: ui(12, color: Palette.dim3),
                       ),
                     ),

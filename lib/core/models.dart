@@ -25,6 +25,8 @@ class Session {
   final String id;
   String project;
   String agent;
+  /// Dossier de travail de l'agent (le `cwd` des hooks), s'il est connu.
+  String cwd = '';
   Color color;
   BotState state = BotState.working;
   final List<SessionStep> steps = [];

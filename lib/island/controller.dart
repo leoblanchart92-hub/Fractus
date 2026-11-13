@@ -182,16 +182,17 @@ class IslandController extends ChangeNotifier {
     final id = _sessionIdOf(p);
     final project = _projectOf(p);
     final agent = _agentOf(p);
+    final cwd = (p['cwd'] ?? '') as String;
 
     switch (name) {
       case 'SessionStart':
-        final s = state.upsertSession(id, project, agent);
+        final s = state.upsertSession(id, project, agent, cwd: cwd);
         s.state = BotState.idle;
         state.touch();
         break;
 
       case 'UserPromptSubmit':
-        final s = state.upsertSession(id, project, agent);
+        final s = state.upsertSession(id, project, agent, cwd: cwd);
         _cancelStop(id);
         s.prompt = (p['prompt'] ?? p['message'] ?? '') as String;
         s.lastMessage = null;
@@ -203,7 +204,7 @@ class IslandController extends ChangeNotifier {
         break;
 
       case 'PreToolUse':
-        final s = state.upsertSession(id, project, agent);
+        final s = state.upsertSession(id, project, agent, cwd: cwd);
         _cancelStop(id);
         final tool = (p['tool_name'] ?? '') as String;
         final input = _map(p['tool_input']);
@@ -215,13 +216,13 @@ class IslandController extends ChangeNotifier {
         break;
 
       case 'PostToolUse':
-        final s = state.upsertSession(id, project, agent);
+        final s = state.upsertSession(id, project, agent, cwd: cwd);
         if (s.state != BotState.thinking) s.state = BotState.thinking;
         state.touch();
         break;
 
       case 'SubagentStart':
-        final s = state.upsertSession(id, project, agent);
+        final s = state.upsertSession(id, project, agent, cwd: cwd);
         final kind = (p['agent_type'] ?? '') as String;
         s.addStep(SessionStep(StepKind.note, kind.isEmpty ? 'Sous-agent lancé' : 'Sous-agent $kind'));
         s.state = BotState.searching;
@@ -229,7 +230,7 @@ class IslandController extends ChangeNotifier {
         break;
 
       case 'Notification':
-        final s = state.upsertSession(id, project, agent);
+        final s = state.upsertSession(id, project, agent, cwd: cwd);
         final msg = (p['message'] ?? '') as String;
         final lower = msg.toLowerCase();
         if (lower.contains('permission')) {
@@ -246,7 +247,7 @@ class IslandController extends ChangeNotifier {
 
       case 'Stop':
       case 'SubagentStop':
-        final s = state.upsertSession(id, project, agent);
+        final s = state.upsertSession(id, project, agent, cwd: cwd);
         if (name == 'SubagentStop') {
           s.state = BotState.thinking;
           state.touch();
@@ -387,7 +388,7 @@ class IslandController extends ChangeNotifier {
     final input = _map(p['tool_input']);
     final requestId = (p['request_id'] ?? '${DateTime.now().microsecondsSinceEpoch}') as String;
 
-    final s = state.upsertSession(id, project, agent);
+    final s = state.upsertSession(id, project, agent, cwd: cwd);
     _cancelStop(id);
 
     List<AskedQuestion>? questions;

@@ -22,6 +22,7 @@ class SettingsView extends StatefulWidget {
     required this.onRestartHooks,
     required this.updates,
     required this.onStartupChanged,
+    required this.chat,
   });
   final AppState state;
   final IslandController controller;
@@ -32,6 +33,7 @@ class SettingsView extends StatefulWidget {
   final VoidCallback onRestartHooks;
   final UpdateService updates;
   final ValueChanged<bool> onStartupChanged;
+  final ChatService chat;
 
   @override
   State<SettingsView> createState() => _SettingsViewState();
@@ -40,9 +42,10 @@ class SettingsView extends StatefulWidget {
 class _SettingsViewState extends State<SettingsView> {
   late final TextEditingController _key = TextEditingController(text: widget.state.settings.chatApiKey);
   late final TextEditingController _model = TextEditingController(text: widget.state.settings.chatModel);
-  late final TextEditingController _baseUrl = TextEditingController(text: widget.state.settings.chatBaseUrl);
-  late ChatProvider _provider = ChatProviderInfo.parse(widget.state.settings.chatProvider);
   bool _savedChat = false;
+  bool _testing = false;
+  String? _testResult;
+  bool _testOk = false;
   late final TextEditingController _port = TextEditingController(text: widget.state.settings.hookPort.toString());
   bool _copied = false;
 
@@ -50,7 +53,6 @@ class _SettingsViewState extends State<SettingsView> {
   void dispose() {
     _key.dispose();
     _model.dispose();
-    _baseUrl.dispose();
     _port.dispose();
     super.dispose();
   }
@@ -154,46 +156,46 @@ class _SettingsViewState extends State<SettingsView> {
                 ],
               ),
             ],
-            _section('Chat'),
+            _section('Chat (Groq)'),
             Row(
               children: [
-                for (final p in ChatProvider.values) ...[
-                  _chip(p.label, _provider == p, () => setState(() => _provider = p)),
-                  const SizedBox(width: 6),
-                ],
-                const Spacer(),
-                if (_provider == ChatProvider.groq)
-                  Text('Clé gratuite sur console.groq.com', style: ui(11, color: Palette.dim3)),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Expanded(flex: 3, child: _field(_key, hint: _provider.keyHint, obscure: true)),
+                Expanded(flex: 3, child: _field(_key, hint: 'Clé API Groq (gsk_…) — gratuite sur console.groq.com', obscure: true)),
                 const SizedBox(width: 6),
-                Expanded(flex: 2, child: _field(_model, hint: 'Modèle (${_provider.defaultModel})')),
+                IslandButton(
+                  label: _testing ? 'Test…' : 'Tester',
+                  compact: true,
+                  onTap: _testing ? () {} : _testKey,
+                ),
                 const SizedBox(width: 6),
                 IslandButton(
                   label: _savedChat ? 'Enregistré' : 'Enregistrer',
                   compact: true,
                   primary: true,
-                  onTap: () {
-                    s.chatProvider = _provider.name;
-                    s.chatApiKey = _key.text.trim();
-                    s.chatModel = _model.text.trim();
-                    s.chatBaseUrl = _provider == ChatProvider.openai ? _baseUrl.text.trim() : '';
-                    widget.state.saveSettingsSoon();
-                    setState(() => _savedChat = true);
-                  },
+                  onTap: _saveChat,
                 ),
               ],
             ),
-            if (_provider == ChatProvider.openai) ...[
-              const SizedBox(height: 4),
-              _field(_baseUrl, hint: 'URL de base (vide = https://api.openai.com/v1 ; Ollama : http://localhost:11434/v1)'),
+            if (_testResult != null) ...[
+              const SizedBox(height: 3),
+              Text(_testResult!, style: ui(11, color: _testOk ? Palette.dim : Palette.redText)),
             ],
-            Text('La clé reste sur cette machine (%APPDATA%\\fractus\\settings.json). Rien n\'est envoyé sans ton message.',
-                style: ui(11, color: Palette.dim3)),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(child: _field(_model, hint: 'Modèle : automatique (le plus puissant du compte)')),
+                const SizedBox(width: 6),
+                _modelPicker(),
+              ],
+            ),
+            _toggle('Recherche web et exécution de code (groq/compound)', s.chatWebSearch, (v) {
+              s.chatWebSearch = v;
+              widget.state.saveSettingsSoon();
+            }),
+            Text(
+              'Raisonnement poussé au maximum, outils de lecture de tes projets (fichiers, recherche, sessions). '
+              'La clé reste sur cette machine (%APPDATA%\\fractus\\settings.json) ; rien ne part sans ton message.',
+              style: ui(11, color: Palette.dim3),
+            ),
             _section('Mises à jour'),
             _toggle('Chercher les mises à jour automatiquement', s.autoUpdate, (v) {
               s.autoUpdate = v;
@@ -255,21 +257,71 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
-  Widget _chip(String label, bool on, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          height: 22,
-          padding: const EdgeInsets.symmetric(horizontal: 9),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: on ? Palette.ink : Palette.tabOn,
-            borderRadius: BorderRadius.circular(11),
+  void _saveChat() {
+    final s = widget.state.settings;
+    s.chatApiKey = _key.text.trim();
+    s.chatModel = _model.text.trim();
+    widget.state.saveSettingsSoon();
+    setState(() => _savedChat = true);
+  }
+
+  Future<void> _testKey() async {
+    _saveChat();
+    setState(() {
+      _testing = true;
+      _testResult = null;
+    });
+    try {
+      final models = await widget.chat.listModels();
+      setState(() {
+        _testOk = true;
+        _testResult = models.isEmpty
+            ? 'Clé acceptée, mais aucun modèle de chat disponible.'
+            : 'Clé OK — ${models.length} modèles. Automatique : ${widget.chat.effectiveModel}.';
+      });
+    } catch (e) {
+      setState(() {
+        _testOk = false;
+        _testResult = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
+  }
+
+  Widget _modelPicker() {
+    final models = widget.chat.models;
+    return PopupMenuButton<String>(
+      tooltip: models.isEmpty ? 'Teste la clé pour lister les modèles' : 'Choisir un modèle',
+      color: Palette.card,
+      padding: EdgeInsets.zero,
+      onSelected: (id) {
+        _model.text = id == '' ? '' : id;
+        _saveChat();
+      },
+      itemBuilder: (_) => [
+        PopupMenuItem(value: '', height: 30, child: Text('Automatique (le plus puissant)', style: ui(12))),
+        for (final m in models)
+          PopupMenuItem(
+            value: m.id,
+            height: 30,
+            child: Text(
+              m.contextWindow > 0 ? '${m.id}  ·  ${(m.contextWindow / 1000).round()}k' : m.id,
+              style: ui(12),
+            ),
           ),
-          child: Text(label, style: ui(11.5, weight: FontWeight.w600, color: on ? const Color(0xFF111214) : Palette.dim)),
+      ],
+      child: Container(
+        height: 26,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(color: Palette.tabOn, borderRadius: BorderRadius.circular(7)),
+        alignment: Alignment.center,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(models.isEmpty ? 'Modèles' : '${models.length} modèles', style: ui(11.5, color: Palette.dim)),
+            const Icon(Icons.expand_more_rounded, size: 14, color: Palette.dim),
+          ],
         ),
       ),
     );

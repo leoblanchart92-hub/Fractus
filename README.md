@@ -35,8 +35,11 @@ lui, s'appelle **Fractus** : un petit cristal aux grands yeux.
   Toujours** ; `AskUserQuestion` montre ses choix (jusqu'à 4 questions, sélection multiple).
   Jamais rien d'autorisé sans un clic ; sans réponse, le terminal reprend la main.
 - 🎉 **Terminé / erreur** — Fractus fait sa roulade, la carte verte résume la réponse.
-- 💬 **Chat** — avec votre propre clé **Groq** (par défaut), OpenAI/compatible (Mistral, Ollama…) ou
-  Anthropic (Réglages → Chat) ; le modèle voit vos sessions en cours.
+- 💬 **Chat surpuissant** — avec votre clé **Groq** (gratuite) : le modèle le plus capable du compte
+  choisi automatiquement (gpt-oss-120b, Kimi K2, Llama 3.3 70B…), raisonnement au maximum, réponses en
+  streaming, et des **outils locaux en lecture seule** (sessions, lecture de fichiers, listing, recherche
+  de texte) que le modèle appelle lui-même pour répondre avec le vrai contenu de vos projets. En option,
+  `groq/compound` ajoute la recherche web et l'exécution de code côté Groq.
 - ⚙️ **Réglages dans l'île** — survol, son, lancement avec Windows, port des hooks, clé API, mises à jour, démo, quitter.
 - 🫥 **En arrière-plan** — pas de fenêtre dans la barre des tâches : une icône dans la zone de
   notification (clic gauche : ouvrir l'île ; clic droit : réglages, mises à jour, quitter) et, par
@@ -57,22 +60,24 @@ Chaque push est compilé par GitHub Actions (`.github/workflows/windows.yml`) ; 
 l'onglet *Actions → run → Artifacts*. Un tag `vX.Y.Z` (égal au `version:` de `pubspec.yaml`) publie une
 Release avec l'installateur, que les Fractus déjà installés proposeront d'installer.
 
-## La clé API (chat)
+## La clé API Groq (chat)
 
-Le chat utilise votre propre clé. Ouvrez l'île → ⚙️ **Réglages** → section **Chat** :
+1. Créez une clé gratuite sur [console.groq.com/keys](https://console.groq.com/keys) (`gsk_…`).
+2. Ouvrez l'île → ⚙️ **Réglages** → **Chat (Groq)** → collez la clé → **Tester** (liste les modèles
+   du compte et affiche celui qui sera utilisé) → **Enregistrer**.
+3. Facultatif : fixez un modèle précis (menu « Modèles ») ou activez **Recherche web et exécution de
+   code** (`groq/compound`).
 
-1. choisissez le fournisseur : **Groq** (par défaut, clé gratuite sur [console.groq.com](https://console.groq.com/keys)),
-   **OpenAI / compatible** (OpenAI, Mistral, Ollama en local… avec une URL de base au choix) ou **Anthropic** ;
-2. collez la clé (`gsk_…` pour Groq) ; le modèle est facultatif (`llama-3.3-70b-versatile` par défaut chez Groq) ;
-3. **Enregistrer**.
-
-Elle est écrite dans `%APPDATA%\fractus\settings.json` (champs `chatProvider`, `chatApiKey`,
-`chatModel`, `chatBaseUrl`) et ne quitte la machine que vers le fournisseur choisi, quand vous envoyez
-un message. Vous pouvez aussi éditer ce fichier à la main :
+La clé est écrite dans `%APPDATA%\fractus\settings.json` (champ `chatApiKey`) et ne part que vers
+`api.groq.com`, quand vous envoyez un message. Vous pouvez aussi éditer ce fichier à la main :
 
 ```json
-{ "chatProvider": "groq", "chatApiKey": "gsk_xxxxxxxx", "chatModel": "" }
+{ "chatApiKey": "gsk_xxxxxxxx", "chatModel": "", "chatWebSearch": false }
 ```
+
+Ce que le modèle peut faire pendant le chat : `get_sessions`, `read_file`, `list_directory`,
+`search_text`, `get_datetime` — rien d'autre. Il ne peut ni écrire, ni exécuter, ni approuver une
+permission : ça reste un clic humain sur la carte.
 
 ## Construire et lancer (Windows)
 

@@ -322,6 +322,7 @@ class _IslandWidgetState extends State<IslandWidget> {
           onRestartHooks: widget.onRestartHooks,
           updates: widget.updates,
           onStartupChanged: widget.onStartupChanged,
+          chat: widget.chat,
         );
       case IslandView.update:
         return UpdateView(

@@ -12,6 +12,7 @@ import 'core/state.dart';
 import 'island/controller.dart';
 import 'island/island_widget.dart';
 import 'services/chat_service.dart';
+import 'services/chat_tools.dart';
 import 'services/demo.dart';
 import 'services/hook_server.dart';
 import 'services/startup_service.dart';
@@ -34,14 +35,13 @@ Future<void> main() async {
   final chat = ChatService(
     apiKey: settings.chatApiKey,
     model: settings.chatModel,
-    provider: ChatProviderInfo.parse(settings.chatProvider),
-    baseUrl: settings.chatBaseUrl,
+    webSearch: settings.chatWebSearch,
+    tools: ChatTools(state),
   );
   state.addListener(() {
     chat.apiKey = state.settings.chatApiKey;
     chat.model = state.settings.chatModel;
-    chat.provider = ChatProviderInfo.parse(state.settings.chatProvider);
-    chat.baseUrl = state.settings.chatBaseUrl;
+    chat.webSearch = state.settings.chatWebSearch;
   });
   final startup = StartupService();
   final updates = UpdateService(autoCheck: settings.autoUpdate);

@@ -74,10 +74,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Session upsertSession(String id, String project, String agent) {
+  Session upsertSession(String id, String project, String agent, {String? cwd}) {
     final s = sessions.putIfAbsent(id, () => Session(id: id, project: project, agent: agent));
     s.project = project;
     s.agent = agent;
+    if (cwd != null && cwd.isNotEmpty) s.cwd = cwd;
     s.updated = DateTime.now();
     focusedId ??= id;
     return s;
