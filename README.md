@@ -72,13 +72,20 @@ lui, s'appelle **Fractus** : un petit cristal aux grands yeux.
    L'adresse (`192.168.x.x:7790`) et le code (`XXXX-XXXX`) s'affichent. Si le téléphone ne se connecte pas,
    clique **Pare-feu** une fois (ouvre le port sur les réseaux privés, demande les droits administrateur).
 2. Sur le téléphone : installe `Fractus-Android.apk` (Release GitHub ; autoriser les sources inconnues),
-   Réglages → entre l'adresse et le code → **Enregistrer**.
+   l'île s'ouvre sur ses réglages → entre l'adresse et le code → **Se connecter**.
 3. Depuis l'extérieur : [Tailscale](https://tailscale.com) sur le PC et le téléphone, puis l'adresse Tailscale
    du PC (`100.x.x.x:7790`). Pas de serveur relais : rien ne transite ailleurs que entre tes deux appareils.
 
+Sur le téléphone, c'est **la même île que sur le PC** : Fractus animé (tape-le trois fois…), les mêmes cartes
+(permission avec Refuser / Autoriser / Toujours, question, session en cours avec ses étapes en direct), le chat,
+le journal avec Annuler, et les réglages du PC — posée en haut de l'écran, au-dessus de l'écran du PC en direct.
+La croix la replie en petite île (Fractus + les minis des sessions) ; une demande la rouvre toute seule.
+
 Le serveur « téléphone » (`lib/services/remote_server.dart`) n'écoute que si l'option est active, exige le code
 à chaque requête, et consigne les actions rapides dans le journal. Le code source de l'appli est dans `mobile/`
-(Flutter ; le squelette Android est généré par `flutter create` sur la CI).
+(Flutter ; le squelette Android est généré par `flutter create` sur la CI). L'interface de l'île — le personnage
+(`lib/companion/`), la géométrie, la palette et les briques (`lib/core/`, `lib/island/widgets.dart`) — n'existe
+qu'une fois, côté PC : `mobile/tool/sync_shared.sh` (ou `.ps1`) la copie dans `mobile/lib/` avant de compiler.
 
 ## Installer (Windows)
 

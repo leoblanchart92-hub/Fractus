@@ -157,6 +157,8 @@ jobs:
       - name: Build APK
         working-directory: mobile
         run: |
+          # L'interface de l'île (Fractus, cartes, palette) est celle du PC : on la copie.
+          sh tool/sync_shared.sh
           flutter pub get
           flutter build apk --release
           cp build/app/outputs/flutter-apk/app-release.apk ../Fractus-Android.apk
