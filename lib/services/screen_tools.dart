@@ -92,7 +92,7 @@ if (\$rw -gt $maxWidth) {
 }
 \$codec = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { \$_.MimeType -eq 'image/jpeg' }
 \$params = New-Object System.Drawing.Imaging.EncoderParameters 1
-\$params.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality), $quality
+\$params.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality), [long]$quality
 \$out.Save(${psQuote(path)}, \$codec, \$params)
 \$g.Dispose(); if (\$out -ne \$bmp) { \$out.Dispose() }; \$bmp.Dispose()
 @{ path=${psQuote(path)}; x=\$rx; y=\$ry; width=\$rw; height=\$rh; scale=\$scale } | ConvertTo-Json -Compress
