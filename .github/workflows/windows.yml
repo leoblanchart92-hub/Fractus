@@ -158,9 +158,10 @@ jobs:
         working-directory: mobile
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
-        # Avec ta clé (secrets ANDROID_KEYSTORE_B64 + ANDROID_KEYSTORE_PASSWORD, et au besoin
-        # ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD), l'APK est toujours signé pareil : les mises
-        # à jour s'installent par-dessus. Sans secrets : clé de debug (il faut désinstaller avant).
+        # Un seul secret suffit : ANDROID_KEYSTORE_B64 (le keystore en base64, mot de passe et
+        # alias « fractus »). L'APK est alors toujours signé pareil : les mises à jour s'installent
+        # par-dessus. Sans secret : clé de debug (il faut désinstaller avant d'installer).
+        # Facultatif : ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD.
         run: |
           if [ -z "$KEYSTORE_B64" ]; then echo "Pas de clé de release : signature debug"; exit 0; fi
           echo "$KEYSTORE_B64" | tr -d ' \n\r' | base64 -d > android/app/fractus-release.keystore
@@ -169,9 +170,9 @@ jobs:
       - name: Build APK
         working-directory: mobile
         env:
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || 'fractus' }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || 'fractus' }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD || 'fractus' }}
         run: |
           # L'interface de l'île (Fractus, cartes, palette) est celle du PC : on la copie.
           sh tool/sync_shared.sh

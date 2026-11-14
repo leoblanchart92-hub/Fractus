@@ -83,10 +83,9 @@ Dans les réglages du téléphone, deux options de plus :
   directement dans la notification. Il redémarre avec le téléphone.
 - **Mise à jour de l'appli** : l'appli regarde la dernière Release GitHub, télécharge l'APK et ouvre
   l'installateur Android. Pour que la mise à jour s'installe par-dessus, l'APK doit être signé avec la même clé
-  à chaque fois : ta clé (créée avec `keytool`, JKS ou PKCS12) va dans les secrets GitHub `ANDROID_KEYSTORE_B64`
-  (le fichier en base64) et `ANDROID_KEYSTORE_PASSWORD`, plus `ANDROID_KEY_ALIAS` si l'alias n'est pas `fractus`
-  et `ANDROID_KEY_PASSWORD` si le mot de passe de la clé diffère de celui du keystore (voir
-  `mobile/tool/sign_release.py`). Sans ces secrets, c'est une clé de debug différente à chaque compilation.
+  à chaque fois : un seul secret GitHub, `ANDROID_KEYSTORE_B64` (ton keystore en base64, mot de passe et alias
+  `fractus` ; voir `mobile/tool/sign_release.py`). Sans ce secret, c'est une clé de debug différente à chaque
+  compilation, et il faut désinstaller avant d'installer.
 
 Sur le téléphone, c'est **la même île que sur le PC**, en plein écran : Fractus animé (tape-le trois fois…),
 les mêmes cartes (permission avec Refuser / Autoriser / Toujours et l'aperçu de ce qu'il veut faire, question,
