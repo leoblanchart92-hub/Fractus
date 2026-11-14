@@ -11,6 +11,7 @@ import '../core/anim.dart';
 import '../core/layout.dart';
 import '../core/models.dart';
 import '../core/theme.dart';
+import '../updater.dart';
 import 'bridge.dart';
 import 'views.dart';
 import 'widgets.dart';
@@ -40,12 +41,14 @@ class _PhoneIslandState extends State<PhoneIsland> {
   void initState() {
     super.initState();
     link.addListener(_sync);
+    updater.addListener(_sync);
     if (!link.configured) _tab = PhoneView.settings;
   }
 
   @override
   void dispose() {
     link.removeListener(_sync);
+    updater.removeListener(_sync);
     super.dispose();
   }
 
@@ -200,6 +203,10 @@ class _PhoneIslandState extends State<PhoneIsland> {
           if (running > 0) ...[
             Text('$running en cours', style: ui(12, color: Palette.dim2)),
             const SizedBox(width: 10),
+          ],
+          if (updater.available) ...[
+            HeaderTab(icon: Icons.system_update_rounded, on: true, size: 14, onTap: () => go(PhoneView.settings)),
+            const SizedBox(width: 4),
           ],
           HeaderTab(
             icon: muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,

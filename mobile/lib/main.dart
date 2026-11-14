@@ -10,6 +10,9 @@ import 'api.dart';
 import 'companion/bot_engine.dart';
 import 'core/theme.dart';
 import 'island/phone_island.dart';
+import 'native.dart';
+import 'prefs.dart';
+import 'updater.dart';
 import 'widget_bridge.dart';
 
 final link = PcLink();
@@ -20,6 +23,8 @@ Future<void> main() async {
   await link.load();
   link.onStatus = (s) => pushStatusToWidgets(s);
   link.restart();
+  // Le service de notifications, s'il est activé (il survit à l'appli).
+  if (await Prefs.notifyEnabled() && link.configured) await Native.startService();
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
@@ -70,6 +75,16 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _handleLaunchLink();
+    Future.delayed(const Duration(seconds: 2), updater.check);
+  }
+
+  /// Un QR code scanné avec l'appareil photo du téléphone ouvre `fractus://pair?…`.
+  Future<void> _handleLaunchLink() async {
+    final l = await Native.launchLink();
+    if (l == null) return;
+    final info = PcConnectionInfo.fromPairLink(l);
+    if (info != null) await link.setInfo(info);
   }
 
   @override
@@ -82,7 +97,10 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Le flux ne vit que quand l'appli est visible (Android coupe le réseau en fond).
-    if (state == AppLifecycleState.resumed) link.restart();
+    if (state == AppLifecycleState.resumed) {
+      link.restart();
+      _handleLaunchLink();
+    }
     if (state == AppLifecycleState.paused) link.pause();
   }
 

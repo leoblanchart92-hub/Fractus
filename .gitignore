@@ -17,3 +17,4 @@ windows/flutter/ephemeral/
 .DS_Store
 *.log
 dist/
+.secrets/

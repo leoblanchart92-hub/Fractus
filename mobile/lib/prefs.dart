@@ -12,6 +12,17 @@ class PcConnectionInfo {
 
   String get baseUrl => 'http://$host:$port';
 
+  /// Le lien d'appairage du QR code du PC : `fractus://pair?host=…&port=…&code=…`.
+  static PcConnectionInfo? fromPairLink(String link) {
+    final u = Uri.tryParse(link.trim());
+    if (u == null || u.scheme != 'fractus' || u.host != 'pair') return null;
+    final host = u.queryParameters['host'] ?? '';
+    final code = u.queryParameters['code'] ?? '';
+    if (host.isEmpty || code.isEmpty) return null;
+    final port = int.tryParse(u.queryParameters['port'] ?? '') ?? 7790;
+    return PcConnectionInfo(host: host, port: port, token: code.trim().toUpperCase());
+  }
+
   /// « 192.168.1.20:7790 » ou « 192.168.1.20 » (port par défaut).
   static PcConnectionInfo parse(String address, String token) {
     var a = address.trim().replaceFirst(RegExp(r'^https?://'), '').replaceAll(RegExp(r'/.*$'), '');
@@ -42,6 +53,11 @@ class Prefs {
     await HomeWidget.saveWidgetData<int>('port', i.port);
     await HomeWidget.saveWidgetData<String>('token', i.token);
   }
+
+  /// Notifications en arrière-plan (le service natif lit la même clé : `flutter.bg_notify`).
+  static Future<bool> notifyEnabled() async => (await SharedPreferences.getInstance()).getBool('bg_notify') ?? false;
+
+  static Future<void> setNotifyEnabled(bool v) async => (await SharedPreferences.getInstance()).setBool('bg_notify', v);
 
   /// Depuis le widget (isolat de fond) : les mêmes infos, lues côté widget.
   static Future<PcConnectionInfo?> loadForWidget() async {

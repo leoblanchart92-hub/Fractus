@@ -11,8 +11,11 @@ import '../core/layout.dart';
 import '../core/models.dart';
 import '../core/theme.dart';
 import '../models.dart';
+import '../native.dart';
 import '../prefs.dart';
+import '../updater.dart';
 import 'bridge.dart';
+import 'qr_scan.dart';
 import 'widgets.dart';
 
 // En plein écran, Fractus est au-dessus des cartes : pas de marge à gauche.
@@ -792,13 +795,52 @@ class _PhoneSettingsState extends State<PhoneSettings> {
   late final TextEditingController _workspace = TextEditingController(text: widget.link.status?.settings?.workspace ?? '');
   String? _message;
   bool _testing = false;
+  bool _notify = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Prefs.notifyEnabled().then((v) {
+      if (mounted) setState(() => _notify = v);
+    });
+    updater.addListener(_onUpdater);
+  }
 
   @override
   void dispose() {
+    updater.removeListener(_onUpdater);
     _address.dispose();
     _code.dispose();
     _workspace.dispose();
     super.dispose();
+  }
+
+  void _onUpdater() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _scan() async {
+    final link = await Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => const QrScanPage()));
+    if (link == null || !mounted) return;
+    final info = PcConnectionInfo.fromPairLink(link);
+    if (info == null) {
+      setState(() => _message = 'QR code illisible');
+      return;
+    }
+    _address.text = '${info.host}:${info.port}';
+    _code.text = info.token;
+    await _connect();
+  }
+
+  Future<void> _setNotify(bool v) async {
+    setState(() => _notify = v);
+    await Prefs.setNotifyEnabled(v);
+    if (v) {
+      await Native.requestNotifications();
+      await Native.startService();
+    } else {
+      await Native.stopService();
+    }
   }
 
   Future<void> _connect() async {
@@ -837,6 +879,7 @@ class _PhoneSettingsState extends State<PhoneSettings> {
       return;
     }
     await widget.link.setInfo(info);
+    if (_notify) await Native.startService();
     if (!mounted) return;
     setState(() {
       _testing = false;
@@ -936,13 +979,25 @@ class _PhoneSettingsState extends State<PhoneSettings> {
           Row(
             children: [
               IslandButton(label: _testing ? 'Connexion…' : 'Se connecter', primary: true, onTap: _testing ? () {} : _connect),
-              const SizedBox(width: 10),
-              Text(
-                widget.link.online ? '● ${widget.link.status?.host ?? ''} · Fractus ${widget.link.status?.version ?? ''}' : '○ hors ligne',
-                style: ui(11, color: widget.link.online ? Palette.green2 : Palette.dim3),
-              ),
+              const SizedBox(width: 8),
+              IslandButton(label: 'Scanner le QR code', onTap: _scan),
             ],
           ),
+          const SizedBox(height: 6),
+          Text(
+            widget.link.online ? '● ${widget.link.status?.host ?? ''} · Fractus ${widget.link.status?.version ?? ''}' : '○ hors ligne',
+            style: ui(11, color: widget.link.online ? Palette.green2 : Palette.dim3),
+          ),
+          _section('Notifications'),
+          _toggle('Prévenir quand Fractus attend ton accord, même appli fermée', _notify, _setNotify),
+          Text(
+            _notify
+                ? 'Une notification discrète reste affichée (c\'est elle qui garde la connexion au PC). Les demandes arrivent avec Autoriser / Refuser / Toujours.'
+                : 'Un petit service garde la connexion au PC ouverte ; les demandes arrivent en notification avec les boutons de réponse.',
+            style: ui(11, color: Palette.dim3, height: 1.3),
+          ),
+          _section('Mise à jour de l\'appli'),
+          _updateRow(),
           if (online) ...[
             _section('Chat (Groq) — sur le PC'),
             Row(
@@ -990,6 +1045,56 @@ class _PhoneSettingsState extends State<PhoneSettings> {
           ],
         ],
       ),
+    );
+  }
+
+  Widget _updateRow() {
+    final u = updater;
+    final String txt;
+    switch (u.status) {
+      case UpdateStatus.idle:
+        txt = u.currentVersion.isEmpty ? 'Fractus téléphone' : 'Fractus téléphone ${u.currentVersion}';
+      case UpdateStatus.checking:
+        txt = 'Recherche…';
+      case UpdateStatus.upToDate:
+        txt = 'Fractus téléphone ${u.currentVersion} — à jour';
+      case UpdateStatus.available:
+        txt = 'Version ${u.latestVersion} disponible (tu as la ${u.currentVersion})';
+      case UpdateStatus.downloading:
+        txt = 'Téléchargement… ${(u.progress * 100).round()} %';
+      case UpdateStatus.ready:
+        txt = 'Téléchargée : Android te propose de l\'installer';
+      case UpdateStatus.error:
+        txt = u.error ?? 'Erreur';
+    }
+    final busy = u.status == UpdateStatus.checking || u.status == UpdateStatus.downloading;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text(txt, maxLines: 2, overflow: TextOverflow.ellipsis, style: ui(12.5, color: u.status == UpdateStatus.error ? Palette.redText : Palette.ink))),
+            const SizedBox(width: 8),
+            if (u.status == UpdateStatus.available)
+              IslandButton(label: 'Télécharger', primary: true, compact: true, onTap: u.download)
+            else if (u.status == UpdateStatus.ready)
+              IslandButton(label: 'Installer', primary: true, compact: true, onTap: u.install)
+            else
+              IslandButton(label: busy ? '…' : 'Vérifier', compact: true, onTap: busy ? () {} : u.check),
+          ],
+        ),
+        if (u.status == UpdateStatus.downloading)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(value: u.progress, minHeight: 4, backgroundColor: Palette.tabOn, color: Palette.accent),
+            ),
+          ),
+        const SizedBox(height: 2),
+        Text('Depuis les Releases GitHub du projet. L\'APK est signé avec la clé de Fractus : la mise à jour s\'installe par-dessus, sans rien perdre.',
+            style: ui(11, color: Palette.dim3, height: 1.3)),
+      ],
     );
   }
 

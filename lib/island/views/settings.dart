@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/settings.dart';
 import '../../core/state.dart';
@@ -64,6 +65,7 @@ class _SettingsViewState extends State<SettingsView> {
 
   List<String> _addresses = const [];
   bool _remoteCopied = false;
+  bool _showQr = false;
   String? _firewallMsg;
 
   @override
@@ -346,8 +348,36 @@ class _SettingsViewState extends State<SettingsView> {
                   ),
                   const SizedBox(width: 6),
                   IslandButton(label: 'Pare-feu', compact: true, onTap: _openFirewall),
+                  const SizedBox(width: 6),
+                  IslandButton(label: 'QR code', compact: true, primary: _showQr, onTap: () => setState(() => _showQr = !_showQr)),
                 ],
               ),
+              if (_showQr && widget.remote.running && _addresses.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: QrImageView(
+                        data: 'fractus://pair?host=${_addresses.first}&port=${widget.remote.port ?? s.remotePort}&code=${s.remoteToken}',
+                        size: 120,
+                        padding: const EdgeInsets.all(6),
+                        backgroundColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Dans l\'appli Fractus sur le téléphone : Réglages → « Scanner le QR code ». '
+                        'L\'appareil photo du téléphone fonctionne aussi : le lien ouvre Fractus directement.\n'
+                        'Le code d\'appairage est dedans : ne le montre qu\'à toi.',
+                        style: ui(11, color: Palette.dim3, height: 1.3),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 3),
               Text(
                 _firewallMsg ??

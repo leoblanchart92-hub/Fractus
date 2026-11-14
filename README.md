@@ -72,9 +72,19 @@ lui, s'appelle **Fractus** : un petit cristal aux grands yeux.
    L'adresse (`192.168.x.x:7790`) et le code (`XXXX-XXXX`) s'affichent. Si le téléphone ne se connecte pas,
    clique **Pare-feu** une fois (ouvre le port sur les réseaux privés, demande les droits administrateur).
 2. Sur le téléphone : installe `Fractus-Android.apk` (Release GitHub ; autoriser les sources inconnues),
-   l'île s'ouvre sur ses réglages → entre l'adresse et le code → **Se connecter**.
+   l'île s'ouvre sur ses réglages → **Scanner le QR code** (bouton **QR code** dans les réglages du PC),
+   ou entre l'adresse et le code à la main → **Se connecter**.
 3. Depuis l'extérieur : [Tailscale](https://tailscale.com) sur le PC et le téléphone, puis l'adresse Tailscale
    du PC (`100.x.x.x:7790`). Pas de serveur relais : rien ne transite ailleurs que entre tes deux appareils.
+
+Dans les réglages du téléphone, deux options de plus :
+- **Notifications** : un petit service natif garde le flux du PC ouvert même appli fermée (une notification
+  discrète reste affichée) et prévient quand Fractus attend ton accord — avec **Autoriser / Refuser / Toujours**
+  directement dans la notification. Il redémarre avec le téléphone.
+- **Mise à jour de l'appli** : l'appli regarde la dernière Release GitHub, télécharge l'APK et ouvre
+  l'installateur Android. Pour que la mise à jour s'installe par-dessus, l'APK doit être signé avec la même clé
+  à chaque fois : la CI utilise les secrets `ANDROID_KEYSTORE_B64` et `ANDROID_KEYSTORE_PASSWORD` (voir
+  `mobile/tool/sign_release.py`) ; sans eux, c'est une clé de debug différente à chaque compilation.
 
 Sur le téléphone, c'est **la même île que sur le PC**, en plein écran : Fractus animé (tape-le trois fois…),
 les mêmes cartes (permission avec Refuser / Autoriser / Toujours et l'aperçu de ce qu'il veut faire, question,

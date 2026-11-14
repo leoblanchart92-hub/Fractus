@@ -154,8 +154,21 @@ jobs:
         # fichiers (manifest, Kotlin, layouts, Dart) sont versionnés et ne sont pas écrasés.
         run: flutter create --platforms=android --project-name fractus_mobile --org app.fractus --no-pub .
 
+      - name: Signing key (release)
+        working-directory: mobile
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        # Avec la clé (secrets ANDROID_KEYSTORE_B64 + ANDROID_KEYSTORE_PASSWORD), l'APK est
+        # toujours signé pareil : les mises à jour s'installent par-dessus. Sinon : clé de debug.
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then echo "Pas de clé de release : signature debug"; exit 0; fi
+          echo "$KEYSTORE_B64" | base64 -d > android/app/fractus-release.p12
+          python3 tool/sign_release.py android/app/build.gradle.kts
+
       - name: Build APK
         working-directory: mobile
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           # L'interface de l'île (Fractus, cartes, palette) est celle du PC : on la copie.
           sh tool/sync_shared.sh

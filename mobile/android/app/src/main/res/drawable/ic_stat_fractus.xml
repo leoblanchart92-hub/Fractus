@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- L'icône de notification : la silhouette de Fractus, en blanc (dessin maison). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,2.5c-5.2,0 -9.5,3.9 -9.5,8.7 0,2.9 1.6,5.5 4.1,7.1L6.1,21.5l3.6,-2.4c0.7,0.1 1.5,0.2 2.3,0.2 5.2,0 9.5,-3.9 9.5,-8.7S17.2,2.5 12,2.5zM8.6,12.8c-0.9,0 -1.6,-0.8 -1.6,-1.8s0.7,-1.8 1.6,-1.8 1.6,0.8 1.6,1.8 -0.7,1.8 -1.6,1.8zM15.4,12.8c-0.9,0 -1.6,-0.8 -1.6,-1.8s0.7,-1.8 1.6,-1.8 1.6,0.8 1.6,1.8 -0.7,1.8 -1.6,1.8z" />
+</vector>
