@@ -3,7 +3,9 @@
 `flutter create` (la CI l'appelle quand le secret de la clé existe).
 
 Usage : sign_release.py android/app/build.gradle.kts
-Attend : android/app/fractus-release.p12 et la variable KEYSTORE_PASSWORD au build.
+Attend au build : android/app/fractus-release.keystore (JKS ou PKCS12, Java
+reconnaît les deux) et les variables KEYSTORE_PASSWORD, KEY_ALIAS (défaut
+« fractus ») et KEY_PASSWORD (défaut : le mot de passe du keystore).
 """
 import sys
 
@@ -15,11 +17,10 @@ if 'create("release")' in src:
 
 block = '''    signingConfigs {
         create("release") {
-            storeFile = file("fractus-release.p12")
-            storeType = "PKCS12"
+            storeFile = file("fractus-release.keystore")
             storePassword = System.getenv("KEYSTORE_PASSWORD")
-            keyAlias = "fractus"
-            keyPassword = System.getenv("KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("KEY_ALIAS")?.takeIf { it.isNotBlank() } ?: "fractus"
+            keyPassword = System.getenv("KEY_PASSWORD")?.takeIf { it.isNotBlank() } ?: System.getenv("KEYSTORE_PASSWORD")
         }
     }
 
