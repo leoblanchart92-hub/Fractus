@@ -194,7 +194,7 @@ class PcLink extends ChangeNotifier {
       } catch (e) {
         if (gen != _generation) return;
         online = false;
-        error = e is PcError ? e.message : 'PC injoignable (${_short(info?.host)})';
+        error = e is PcError ? e.message : 'PC injoignable';
         notifyListeners();
         if (e is PcError && e.status == 401) {
           await Future<void>.delayed(const Duration(seconds: 10));

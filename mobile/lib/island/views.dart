@@ -1037,10 +1037,9 @@ class _PhoneSettingsState extends State<PhoneSettings> {
   }
 
   Future<void> _connect() async {
-    if (!_manual) return _connectByCode();
     final address = _address.text.trim();
     final code = _code.text.trim();
-    if (address.isEmpty) return _connectByCode();
+    if (!_manual || address.isEmpty) return _connectByCode();
     if (code.isEmpty) {
       setState(() => _message = 'Adresse et code obligatoires');
       return;
@@ -1156,34 +1155,44 @@ class _PhoneSettingsState extends State<PhoneSettings> {
             ],
           ),
           Text(
-            'Sur le PC : Réglages → Téléphone. Tape le code affiché, c\'est tout : Fractus trouve le PC tout seul, en Wi-Fi comme en 4G.',
+            'Sur le PC : Réglages → Téléphone. Tape le code affiché, c\'est tout.',
             style: ui(11.5, color: Palette.dim3, height: 1.3),
           ),
           const SizedBox(height: 6),
-          _field(_code, hint: 'Code d\'appairage (ex. AB2C-D3EF)'),
-          if (_manual) ...[
-            const SizedBox(height: 6),
-            _field(_address, hint: 'Adresse du PC (ex. 192.168.1.20:7790)'),
-          ],
+          Row(
+            children: [
+              Expanded(child: _field(_code, hint: 'Code (ex. AB2C-D3EF)', code: true)),
+              const SizedBox(width: 8),
+              IslandButton(label: _testing ? 'Connexion…' : 'Se connecter', primary: true, onTap: _testing ? () {} : _connect),
+            ],
+          ),
           const SizedBox(height: 8),
           Row(
             children: [
-              IslandButton(label: _testing ? 'Connexion…' : 'Se connecter', primary: true, onTap: _testing ? () {} : _connect),
+              IslandButton(label: 'Scanner le QR code', compact: true, onTap: _scan),
               const SizedBox(width: 8),
-              IslandButton(label: 'Scanner le QR code', onTap: _scan),
-              const SizedBox(width: 8),
-              IslandButton(label: _diagRunning ? 'Test…' : 'Diagnostic', onTap: _diagRunning ? () {} : _runDiag),
+              IslandButton(label: _diagRunning ? 'Test…' : 'Diagnostic', compact: true, onTap: _diagRunning ? () {} : _runDiag),
               const Spacer(),
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () => setState(() => _manual = !_manual),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-                  child: Text(_manual ? 'Par le code' : 'Adresse à la main', style: ui(11, color: Palette.dim3)),
+                  child: Text(_manual ? '▾ Masquer les détails' : '▸ Détails', style: ui(11, color: Palette.dim3)),
                 ),
               ),
             ],
           ),
+          if (_manual) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(child: _field(_address, hint: 'Adresse du PC à la main (ex. 192.168.1.20:7790)')),
+                const SizedBox(width: 8),
+                IslandButton(label: 'Utiliser', compact: true, onTap: _testing ? () {} : _connect),
+              ],
+            ),
+          ],
           if (_diag != null) ...[
             const SizedBox(height: 6),
             Container(
@@ -1200,7 +1209,7 @@ class _PhoneSettingsState extends State<PhoneSettings> {
                 : '○ hors ligne',
             style: ui(11, color: widget.link.online ? Palette.green2 : Palette.dim3),
           ),
-          if ((widget.link.info?.hosts.length ?? 0) > 0) ...[
+          if (_manual && (widget.link.info?.hosts.length ?? 0) > 0) ...[
             const SizedBox(height: 6),
             Text('ADRESSES CONNUES DU PC', style: ui(9.5, weight: FontWeight.w700, color: Palette.dim4)),
             for (final h in widget.link.info!.hosts)
@@ -1401,16 +1410,20 @@ class _PhoneSettingsState extends State<PhoneSettings> {
     );
   }
 
-  Widget _field(TextEditingController c, {required String hint}) {
+  Widget _field(TextEditingController c, {required String hint, bool code = false}) {
     return Container(
-      height: 30,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: BoxDecoration(color: Palette.tabOn, borderRadius: BorderRadius.circular(7)),
+      height: 28 * touchScale + 2,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(color: Palette.tabOn, borderRadius: BorderRadius.circular(9)),
       alignment: Alignment.centerLeft,
       child: TextField(
         controller: c,
-        style: ui(12),
+        style: code ? ui(15, weight: FontWeight.w700).copyWith(letterSpacing: 2) : ui(12),
+        textCapitalization: code ? TextCapitalization.characters : TextCapitalization.none,
+        autocorrect: !code,
+        enableSuggestions: !code,
         cursorColor: Palette.ink,
+        onSubmitted: code ? (_) => _connect() : null,
         decoration: InputDecoration(isDense: true, isCollapsed: true, border: InputBorder.none, hintText: hint, hintStyle: ui(12, color: Palette.dim3)),
       ),
     );

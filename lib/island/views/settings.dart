@@ -327,23 +327,21 @@ class _SettingsViewState extends State<SettingsView> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                     decoration: BoxDecoration(
                       color: Palette.card,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Palette.hairline),
                     ),
-                    child: Text(s.remoteToken, style: ui(16, weight: FontWeight.w700, color: Palette.ink).copyWith(letterSpacing: 1.5)),
+                    child: Text(s.remoteToken, style: ui(18, weight: FontWeight.w700, color: Palette.ink).copyWith(letterSpacing: 2)),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      widget.remote.running
-                          ? 'Sur le téléphone : ouvre Fractus, tape ce code, « Se connecter ». Ça marche en Wi-Fi comme en 4G, de partout.'
-                          : (widget.remote.error ?? 'Serveur arrêté'),
+                      'Sur le téléphone : ouvre Fractus, tape ce code, « Se connecter ». Rien d\'autre.',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: ui(11.5, color: widget.remote.running ? Palette.dim : Palette.redText, height: 1.3),
+                      style: ui(12, color: Palette.dim, height: 1.3),
                     ),
                   ),
                   IslandButton(
@@ -365,58 +363,69 @@ class _SettingsViewState extends State<SettingsView> {
                       setState(() => _remoteCopied = false);
                     },
                   ),
-                  const SizedBox(width: 6),
-                  IslandButton(label: 'QR code', compact: true, primary: _showQr, onTap: () => setState(() => _showQr = !_showQr)),
                 ],
               ),
-              if (_showQr && widget.remote.running && _addresses.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              _remoteAccess(),
+              const SizedBox(height: 4),
+              // Les détails techniques, repliés : QR code, adresses, pare-feu.
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _showQr = !_showQr),
+                child: Text(_showQr ? '▾ Masquer les détails' : '▸ Détails (QR code, adresses, pare-feu)', style: ui(11, color: Palette.dim3)),
+              ),
+              if (_showQr) ...[
                 const SizedBox(height: 6),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: QrImageView(
-                        data: 'fractus://pair?host=${_addresses.first}&hosts=${Uri.encodeQueryComponent(_allAddresses.join(','))}&port=${widget.remote.port ?? s.remotePort}&code=${s.remoteToken}',
-                        size: 120,
-                        padding: const EdgeInsets.all(6),
-                        backgroundColor: Colors.white,
+                    if (widget.remote.running && _addresses.isNotEmpty)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: QrImageView(
+                          data: 'fractus://pair?host=${_addresses.first}&hosts=${Uri.encodeQueryComponent(_allAddresses.join(','))}&port=${widget.remote.port ?? s.remotePort}&code=${s.remoteToken}',
+                          size: 110,
+                          padding: const EdgeInsets.all(6),
+                          backgroundColor: Colors.white,
+                        ),
                       ),
-                    ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Text(
-                        'Dans l\'appli Fractus sur le téléphone : Réglages → « Scanner le QR code ». '
-                        'L\'appareil photo du téléphone fonctionne aussi : le lien ouvre Fractus directement.\n'
-                        'Le code d\'appairage est dedans : ne le montre qu\'à toi.',
-                        style: ui(11, color: Palette.dim3, height: 1.3),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'QR code : dans l\'appli du téléphone, « Scanner le QR code » (facultatif, le code suffit).\n'
+                            'Wi-Fi : ${_addresses.isEmpty ? '(pas de réseau)' : '${_addresses.first}:${widget.remote.port ?? s.remotePort}'}'
+                            '${_addresses.length > 1 ? ' (aussi ${_addresses.skip(1).join(', ')})' : ''}'
+                            '${widget.remote.tunnel?.online == true ? '\nInternet : ${widget.remote.tunnel!.url}' : ''}',
+                            style: ui(11, color: Palette.dim3, height: 1.3),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _firewallMsg ?? 'Si le téléphone ne passe pas par le Wi-Fi à la maison : « Pare-feu » (une fois, droits administrateur). Sinon il passe par Internet, ce qui marche aussi.',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: ui(11, color: Palette.dim3, height: 1.3),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              IslandButton(label: 'Pare-feu', compact: true, onTap: _openFirewall),
+                              if (widget.remote.tunnel != null) ...[
+                                const SizedBox(width: 6),
+                                IslandButton(label: 'Relancer le tunnel', compact: true, onTap: widget.remote.tunnel!.restart),
+                              ],
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ],
-              const SizedBox(height: 6),
-              _remoteAccess(),
-              const SizedBox(height: 6),
-              // Les détails, pour qui veut : adresses et pare-feu.
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _firewallMsg ??
-                          'Wi-Fi : ${_addresses.isEmpty ? '(pas de réseau)' : '${_addresses.first}:${widget.remote.port ?? s.remotePort}'}'
-                              '${_addresses.length > 1 ? ' (aussi ${_addresses.skip(1).join(', ')})' : ''}. '
-                              'Si le téléphone ne passe pas par le Wi-Fi : « Pare-feu » (une fois, droits administrateur) ; '
-                              'sinon il passe par Internet, ce qui marche aussi à la maison.',
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: ui(11, color: Palette.dim3, height: 1.3),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  IslandButton(label: 'Pare-feu', compact: true, onTap: _openFirewall),
-                ],
-              ),
             ],
             _section('Mises à jour'),
             _toggle('Chercher les mises à jour automatiquement', s.autoUpdate, (v) {
@@ -516,48 +525,43 @@ class _SettingsViewState extends State<SettingsView> {
     return [..._addresses, if (t != null && t.online) t.url!];
   }
 
-  /// Hors de chez soi : le tunnel Internet (cloudflared, gratuit, sans compte), lancé avec le serveur.
+  /// Une seule ligne, en français : est-ce que le téléphone peut se connecter avec le code ?
   Widget _remoteAccess() {
     final t = widget.remote.tunnel;
-    String line;
-    Color color = Palette.dim3;
-    switch (t?.status ?? TunnelStatus.off) {
-      case TunnelStatus.off:
-        line = 'Accès depuis Internet : arrêté.';
-      case TunnelStatus.downloading:
-        line = 'Accès depuis Internet : téléchargement de cloudflared (une seule fois)… ${(t!.progress * 100).round()} %';
-      case TunnelStatus.starting:
-        line = 'Accès depuis Internet : ouverture du tunnel…';
-      case TunnelStatus.online:
-        line = 'Accès depuis Internet : en ligne (${t!.url}). Le téléphone retrouve cette adresse tout seul avec le code, même après un redémarrage.';
-        color = Palette.green2;
-      case TunnelStatus.error:
-        line = 'Accès depuis Internet : ${t!.error ?? 'erreur'}';
-        color = Palette.redText;
-    }
     final rz = widget.remote.rendezvousError;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    String line;
+    Color color;
+    IconData icon;
+    if (!widget.remote.running) {
+      line = widget.remote.error ?? 'Serveur arrêté.';
+      color = Palette.redText;
+      icon = Icons.error_outline_rounded;
+    } else if (t != null && t.online && rz == null) {
+      line = 'Prêt : le téléphone peut se connecter avec ce code, à la maison comme en 4G.';
+      color = Palette.green2;
+      icon = Icons.check_circle_rounded;
+    } else if (t != null && t.status == TunnelStatus.downloading) {
+      line = 'Préparation de l\'accès à distance (${(t.progress * 100).round()} %)… À la maison, en Wi-Fi, ça marche déjà.';
+      color = Palette.dim;
+      icon = Icons.downloading_rounded;
+    } else if (t != null && t.status == TunnelStatus.starting) {
+      line = 'Préparation de l\'accès à distance… À la maison, en Wi-Fi, ça marche déjà.';
+      color = Palette.dim;
+      icon = Icons.sync_rounded;
+    } else if (rz != null) {
+      line = 'Le PC n\'arrive pas à s\'annoncer sur Internet (connexion du PC ?). Nouvel essai automatique. En Wi-Fi, ça marche.';
+      color = Palette.amber;
+      icon = Icons.cloud_off_rounded;
+    } else {
+      line = 'Accès à distance indisponible pour l\'instant (nouvel essai automatique). En Wi-Fi, ça marche.';
+      color = Palette.amber;
+      icon = Icons.cloud_off_rounded;
+    }
+    return Row(
       children: [
-        Row(
-          children: [
-            Icon(
-              t != null && t.online ? Icons.public_rounded : Icons.public_off_rounded,
-              size: 13,
-              color: t != null && t.online ? Palette.green2 : Palette.dim3,
-            ),
-            const SizedBox(width: 6),
-            Expanded(child: Text(line, maxLines: 2, overflow: TextOverflow.ellipsis, style: ui(11, color: color, height: 1.3))),
-            if (t != null && (t.status == TunnelStatus.error || t.status == TunnelStatus.online)) ...[
-              const SizedBox(width: 6),
-              IslandButton(label: 'Relancer', compact: true, onTap: t.restart),
-            ],
-          ],
-        ),
-        if (rz != null) ...[
-          const SizedBox(height: 3),
-          Text('Point de rendez-vous injoignable (le téléphone ne trouvera le PC qu\'en Wi-Fi) : $rz', maxLines: 2, overflow: TextOverflow.ellipsis, style: ui(11, color: Palette.amber)),
-        ],
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 6),
+        Expanded(child: Text(line, maxLines: 2, overflow: TextOverflow.ellipsis, style: ui(11.5, color: color, height: 1.3))),
       ],
     );
   }
