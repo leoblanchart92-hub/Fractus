@@ -89,19 +89,38 @@ class ApprovalInfo {
 }
 
 class ChatMessage {
-  ChatMessage(this.role, this.text, {DateTime? at}) : at = at ?? DateTime.now();
+  ChatMessage(this.role, this.text, {DateTime? at, List<String>? files, this.hidden})
+      : at = at ?? DateTime.now(),
+        files = files ?? const [];
   final String role; // "user" | "assistant" | "system"
   String text;
   final DateTime at;
 
-  Map<String, dynamic> toJson() => {'role': role, 'text': text, 'at': at.toIso8601String()};
+  /// Les noms des fichiers joints (affichés sous le message).
+  final List<String> files;
+
+  /// Ce que le modèle lit en plus du texte (contenu des fichiers joints) ; jamais affiché.
+  final String? hidden;
+
+  /// Le message tel que le modèle le reçoit.
+  String get modelText => hidden == null || hidden!.isEmpty ? text : '$text\n\n$hidden';
+
+  Map<String, dynamic> toJson() => {
+        'role': role,
+        'text': text,
+        'at': at.toIso8601String(),
+        if (files.isNotEmpty) 'files': files,
+        if (hidden != null && hidden!.isNotEmpty) 'hidden': hidden,
+      };
 
   static ChatMessage? fromJson(Object? j) {
     if (j is! Map) return null;
     final role = j['role'];
     final text = j['text'];
     if (role is! String || text is! String) return null;
-    return ChatMessage(role, text, at: DateTime.tryParse((j['at'] ?? '').toString()));
+    final files = (j['files'] as List?)?.map((e) => '$e').toList();
+    final hidden = j['hidden'];
+    return ChatMessage(role, text, at: DateTime.tryParse((j['at'] ?? '').toString()), files: files, hidden: hidden is String ? hidden : null);
   }
 }
 

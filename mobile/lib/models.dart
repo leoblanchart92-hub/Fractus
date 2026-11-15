@@ -104,8 +104,12 @@ class PcMessage {
   PcMessage.fromJson(Map j)
       : role = '${j['role'] ?? ''}',
         text = '${j['text'] ?? ''}',
+        files = ((j['files'] as List?) ?? const []).map((e) => '$e').toList(),
         at = DateTime.tryParse('${j['at'] ?? ''}') ?? DateTime.now();
   final String role, text;
+
+  /// Les fichiers joints sur le PC (noms seulement).
+  final List<String> files;
   final DateTime at;
 }
 

@@ -6,10 +6,12 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../core/attachments.dart';
 import '../core/layout.dart';
 import '../core/models.dart';
 import '../core/state.dart';
 import '../companion/bot_engine.dart';
+import '../services/attachment_reader.dart';
 import '../services/sound.dart';
 
 class IslandController extends ChangeNotifier {
@@ -143,6 +145,60 @@ class IslandController extends ChangeNotifier {
   }
 
   Timer? _hoverTimer;
+
+  // ── Fichiers glissés sur l'île ─────────────────────────────────────────────
+
+  Timer? _dragBounce;
+
+  /// Un fichier arrive au-dessus de l'île : elle s'ouvre sur le chat, Fractus
+  /// fait de grands yeux et sautille jusqu'à ce qu'on lâche (ou qu'on reparte).
+  void dragEnter() {
+    if (state.dragging) return;
+    state.setDragging(true);
+    _closeTimer?.cancel();
+    _hideTimer?.cancel();
+    if (state.mode != IslandMode.expanded || state.view != IslandView.prompt) open(IslandView.prompt);
+    bot.triggerEmote(BotEmote.surprised, duration: 60);
+    _dragBounce?.cancel();
+    _dragBounce = Timer.periodic(const Duration(milliseconds: 700), (_) {
+      if (!state.dragging) return;
+      bot.squash();
+    });
+  }
+
+  void dragLeave() {
+    if (!state.dragging) return;
+    state.setDragging(false);
+    _dragBounce?.cancel();
+    bot.triggerEmote(BotEmote.happy, duration: 0.3);
+    if (!_pointerInside && !state.pinned) {
+      _closeTimer?.cancel();
+      _closeTimer = Timer(const Duration(milliseconds: 1400), () {
+        if (!_pointerInside && !state.pinned) close();
+      });
+    }
+  }
+
+  /// Les fichiers lâchés : Fractus les attrape (étoiles, fier de lui) et les
+  /// garde dans le champ du chat jusqu'à l'envoi.
+  Future<void> dropFiles(List<String> paths) async {
+    _dragBounce?.cancel();
+    state.setDragging(false);
+    final files = <Attachment>[];
+    for (final p in paths.take(8)) {
+      if (p.trim().isEmpty) continue;
+      files.add(await AttachmentReader.inspect(p));
+    }
+    if (files.isEmpty) {
+      bot.triggerEmote(BotEmote.annoyed);
+      return;
+    }
+    open(IslandView.prompt);
+    state.addFiles(files);
+    bot.triggerEmote(BotEmote.proud, duration: 1.6);
+    bot.squash();
+    Sound.play('allow', muted: state.settings.muted);
+  }
 
   /// Le regard : coordonnées normalisées (−1…1) par rapport au centre de Fractus.
   void look(double x, double y) {
@@ -572,6 +628,7 @@ class IslandController extends ChangeNotifier {
     _closeTimer?.cancel();
     _hideTimer?.cancel();
     _hoverTimer?.cancel();
+    _dragBounce?.cancel();
     for (final t in _stopTimers.values) {
       t.cancel();
     }

@@ -3,6 +3,7 @@
 
 import 'dart:math' as math;
 
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -111,6 +112,7 @@ class _IslandWidgetState extends State<IslandWidget> {
           view,
           chatCount: state.chat.length,
           questionPicker: state.pendingApproval?.isQuestion == true,
+          files: state.pendingFiles.isNotEmpty,
         );
         // Ouverture : la courbe « spring » ; fermeture : plus sèche.
         final rank = {IslandMode.hidden: 0, IslandMode.compact: 1, IslandMode.expanded: 2};
@@ -131,7 +133,11 @@ class _IslandWidgetState extends State<IslandWidget> {
           });
         }
 
-        return Align(
+        return DropTarget(
+          onDragEntered: (_) => c.dragEnter(),
+          onDragExited: (_) => c.dragLeave(),
+          onDragDone: (d) => c.dropFiles(d.files.map((f) => f.path).toList()),
+          child: Align(
           alignment: Alignment.topCenter,
           child: Focus(
             focusNode: _keys,
@@ -196,6 +202,10 @@ class _IslandWidgetState extends State<IslandWidget> {
                         if (mode == IslandMode.expanded && view != IslandView.greeting)
                           Positioned(left: 0, width: size.width, top: 0, height: 34, child: _header(view)),
 
+                        // ── Un fichier au-dessus de l'île : la zone de dépôt ──
+                        if (mode == IslandMode.expanded)
+                          Positioned.fill(child: IgnorePointer(child: _DropHalo(on: state.dragging))),
+
                         // ── Les mini Fractus de l'île compacte ──────────────
                         if (mode == IslandMode.compact) ..._compactMinis(size.width),
 
@@ -236,6 +246,7 @@ class _IslandWidgetState extends State<IslandWidget> {
                 ],
               ),
             ),
+          ),
           ),
         );
       },
@@ -442,6 +453,70 @@ class _AuroraGlow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Le halo qui s'allume quand un fichier survole l'île : un liseré Aurora qui
+/// respire et un mot de Fractus. Il laisse passer la souris (IgnorePointer).
+class _DropHalo extends StatelessWidget {
+  const _DropHalo({required this.on});
+  final bool on;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 180),
+      child: on ? const _DropHaloFrame() : const SizedBox.shrink(),
+    );
+  }
+}
+
+class _DropHaloFrame extends StatefulWidget {
+  const _DropHaloFrame();
+
+  @override
+  State<_DropHaloFrame> createState() => _DropHaloFrameState();
+}
+
+class _DropHaloFrameState extends State<_DropHaloFrame> with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (context, _) {
+        final k = 0.55 + 0.45 * Curves.easeInOut.transform(_pulse.value);
+        return Container(
+          margin: const EdgeInsets.fromLTRB(6, 40, 6, 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            color: Palette.accent.withValues(alpha: 0.06 + 0.05 * k),
+            border: Border.all(color: Palette.accent2.withValues(alpha: 0.35 + 0.45 * k), width: 1.5),
+            boxShadow: [BoxShadow(color: Palette.accent3.withValues(alpha: 0.25 * k), blurRadius: 24 + 10 * k)],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.only(left: 96),
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.attach_file_rounded, size: 18, color: Palette.ink.withValues(alpha: 0.9)),
+                  const SizedBox(width: 8),
+                  Text('Lâche-les, je m\'en occupe !', style: ui(14, color: Palette.ink)),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

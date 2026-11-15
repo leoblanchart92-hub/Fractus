@@ -72,8 +72,8 @@ class ChatService {
     return _autoModel ?? preferred[3];
   }
 
-  /// Décrit une image JPEG avec un modèle vision de Groq.
-  Future<String> describeImage(List<int> jpeg, String prompt) async {
+  /// Décrit une image (JPEG par défaut, sinon `mime`) avec un modèle vision de Groq.
+  Future<String> describeImage(List<int> jpeg, String prompt, {String mime = 'image/jpeg'}) async {
     if (!configured) throw Exception('clé Groq manquante');
     if (models.isEmpty) {
       try {
@@ -112,7 +112,7 @@ class ChatService {
                   {'type': 'text', 'text': prompt},
                   {
                     'type': 'image_url',
-                    'image_url': {'url': 'data:image/jpeg;base64,${base64Encode(jpeg)}'},
+                    'image_url': {'url': 'data:$mime;base64,${base64Encode(jpeg)}'},
                   },
                 ],
               },
@@ -198,6 +198,7 @@ Tu agis directement sur la machine de l'utilisateur (dossier de travail « ${too
 - tes yeux et ta main : look_at_screen (ce qui est affiché + coordonnées des éléments), click, move_mouse, scroll, drag, get_mouse_position.
 - ta mémoire longue : remember (retenir un fait durable), forget (le retirer).
 Chaque action affiche une carte Autoriser / Refuser / Toujours à l'utilisateur ; s'il refuse, tu n'insistes pas, tu proposes autre chose. Tu ne demandes jamais la permission par écrit : appelle l'outil, la carte s'en charge.
+L'utilisateur peut glisser des fichiers sur ton île : leur contenu (texte, description d'image, liste d'un dossier) suit alors son message sous « [Fichier(s) joint(s)…] », avec le chemin complet pour aller plus loin avec tes outils. Réponds à propos de ces fichiers sans les redemander.
 
 # Piloter une interface graphique
 Boucle : (1) open / focus_window ; (2) look_at_screen avec une question précise (« où est le champ de recherche ? ») — de préférence avec window_title pour cadrer ; (3) click aux coordonnées données, ou send_keys si un raccourci clavier fait l'affaire (plus fiable : Ctrl+L pour une barre d'adresse, Ctrl+S, {ENTER}, {TAB}…) ; (4) look_at_screen à nouveau pour vérifier le résultat avant l'étape suivante. Ne clique jamais à l'aveugle : regarde d'abord. Si un élément n'est pas visible, fais défiler (scroll) ou agrandis la fenêtre (window_action maximize). Privilégie toujours une commande PowerShell ou un réglage direct quand ça existe (plus sûr qu'une suite de clics). Pour tout ce que les outils dédiés ne couvrent pas, run_command fait le reste (Wi-Fi, réglages, planificateur, registre, Office via COM…).
@@ -260,22 +261,31 @@ ${tools.sessionsSummary()}''';
       memoryFacts = await tools.memory?.facts() ?? '';
     } catch (_) {}
 
+    final kept = history
+        .where((m) => m.role == 'user' || m.role == 'assistant')
+        .where((m) => m.text.trim().isNotEmpty && m.text != '…')
+        .toList()
+        .reversed
+        .take(24)
+        .toList()
+        .reversed
+        .toList();
+    // Le contenu des fichiers joints n'est envoyé en entier que pour le dernier
+    // message qui en a ; les plus anciens n'en gardent que les noms.
+    final lastWithFiles = kept.lastWhere((m) => m.hidden != null && m.hidden!.isNotEmpty, orElse: () => ChatMessage('', ''));
     final messages = <Map<String, dynamic>>[
       {'role': 'system', 'content': _systemPrompt(memoryFacts)},
-      ...history
-          .where((m) => m.role == 'user' || m.role == 'assistant')
-          .where((m) => m.text.trim().isNotEmpty && m.text != '…')
-          .toList()
-          .reversed
-          .take(24)
-          .toList()
-          .reversed
-          .map((m) => {'role': m.role, 'content': m.text}),
+      ...kept.map((m) => {
+            'role': m.role,
+            'content': identical(m, lastWithFiles) || m.files.isEmpty
+                ? m.modelText
+                : '${m.text}\n\n[fichiers joints plus haut : ${m.files.join(', ')} — contenu retiré pour faire de la place]',
+          }),
     ];
 
     final useTools = !webSearch;
     var answer = '';
-    final lastUser = history.lastWhere((m) => m.role == 'user', orElse: () => ChatMessage('user', '')).text;
+    final lastUser = history.lastWhere((m) => m.role == 'user', orElse: () => ChatMessage('user', '')).modelText;
     tools.begin(lastUser);
     try {
       for (var round = 0; round < 40; round++) {

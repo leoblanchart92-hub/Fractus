@@ -2,22 +2,48 @@
 // Ajoute le message, fait réfléchir le modèle (outils compris), met la réponse
 // à jour au fil de l'eau dans la conversation de l'état.
 
+import '../core/attachments.dart';
 import '../core/models.dart';
 import '../core/state.dart';
+import 'attachment_reader.dart';
 import 'chat_service.dart';
 
 class ChatRunner {
   ChatRunner._();
 
-  /// Renvoie faux si Fractus était déjà occupé (ou le texte vide).
-  static Future<bool> send(AppState state, ChatService chat, String text, {void Function()? onUpdate}) async {
-    final t = text.trim();
-    if (t.isEmpty || state.chatBusy) return false;
-    state.addChat(ChatMessage('user', t));
+  /// Renvoie faux si Fractus était déjà occupé (ou rien à envoyer : ni texte ni fichier).
+  static Future<bool> send(
+    AppState state,
+    ChatService chat,
+    String text, {
+    List<Attachment> files = const [],
+    void Function()? onUpdate,
+  }) async {
+    var t = text.trim();
+    if ((t.isEmpty && files.isEmpty) || state.chatBusy) return false;
+    final attached = List<Attachment>.from(files);
+    if (t.isEmpty) t = attached.length == 1 ? 'Regarde ce fichier.' : 'Regarde ces fichiers.';
     final reply = ChatMessage('assistant', '…');
-    state.addChat(reply);
     state.chatBusy = true;
     state.touch();
+    onUpdate?.call();
+    // D'abord lire les fichiers (le texte, les images décrites), puis poser le message.
+    String hidden = '';
+    if (attached.isNotEmpty) {
+      final waiting = ChatMessage('assistant', '⟡ je regarde ${attached.length == 1 ? attached.first.name : '${attached.length} fichiers'}…');
+      state.addChat(waiting);
+      try {
+        hidden = await AttachmentReader.describe(attached, chat, t, onStatus: (s) {
+          waiting.text = '⟡ $s…';
+          state.touch();
+          onUpdate?.call();
+        });
+      } finally {
+        state.chat.remove(waiting);
+      }
+    }
+    state.addChat(ChatMessage('user', t, files: attached.map((f) => f.name).toList(), hidden: hidden.isEmpty ? null : hidden));
+    state.addChat(reply);
     onUpdate?.call();
     try {
       final answer = await chat.send(

@@ -92,9 +92,13 @@ const Map<IslandView, ViewLayout> viewLayouts = {
 const double questionPickerH = 200;
 
 /// La vue chat grandit avec la conversation (IslandContainer.chatPromptHeight).
-double chatPromptHeight(int messageCount) => (260 + messageCount * 40).clamp(260, 300).toDouble();
+double chatPromptHeight(int messageCount, {bool files = false}) =>
+    (260 + messageCount * 40).clamp(260, 300).toDouble() + (files ? filesRowH : 0);
 
-Size islandSize(IslandMode mode, IslandView view, {int chatCount = 0, bool questionPicker = false}) {
+/// La rangée des fichiers joints au-dessus du champ (quand il y en a).
+const double filesRowH = 30;
+
+Size islandSize(IslandMode mode, IslandView view, {int chatCount = 0, bool questionPicker = false, bool files = false}) {
   switch (mode) {
     case IslandMode.hidden:
       // Pas d'encoche où se cacher : l'île se rétracte à zéro.
@@ -104,7 +108,7 @@ Size islandSize(IslandMode mode, IslandView view, {int chatCount = 0, bool quest
     case IslandMode.expanded:
       double h;
       if (view == IslandView.prompt) {
-        h = chatPromptHeight(chatCount);
+        h = chatPromptHeight(chatCount, files: files);
       } else if (view == IslandView.question && questionPicker) {
         h = questionPickerH;
       } else {

@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'attachments.dart';
 import 'layout.dart';
 import 'models.dart';
 import 'settings.dart';
@@ -34,6 +35,40 @@ class AppState extends ChangeNotifier {
   Conversation conversation = Conversation();
   List<ChatMessage> get chat => conversation.messages;
   bool chatBusy = false;
+
+  /// Les fichiers posés sur l'île, en attente d'être envoyés avec le prochain message.
+  final List<Attachment> pendingFiles = [];
+
+  /// Un fichier est en train d'être glissé au-dessus de l'île.
+  bool dragging = false;
+
+  void setDragging(bool v) {
+    if (dragging == v) return;
+    dragging = v;
+    notifyListeners();
+  }
+
+  void addFiles(Iterable<Attachment> files) {
+    var added = false;
+    for (final f in files) {
+      if (pendingFiles.any((p) => p.path == f.path)) continue;
+      if (pendingFiles.length >= 8) break;
+      pendingFiles.add(f);
+      added = true;
+    }
+    if (added) notifyListeners();
+  }
+
+  void removeFile(Attachment f) {
+    pendingFiles.remove(f);
+    notifyListeners();
+  }
+
+  void clearFiles() {
+    if (pendingFiles.isEmpty) return;
+    pendingFiles.clear();
+    notifyListeners();
+  }
 
   /// Qui garde les conversations sur disque (posé par main) ; null dans les tests.
   ConversationStore? conversations;

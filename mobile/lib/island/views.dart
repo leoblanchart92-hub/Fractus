@@ -707,7 +707,18 @@ class _Bubble extends StatelessWidget {
               ),
               border: Border.all(color: Palette.hairline),
             ),
-            child: Text(m.text, style: ui(12.5, height: 1.35)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(m.text, style: ui(12.5, height: 1.35)),
+                if (m.files.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text('📎 ${m.files.join(' · ')}', style: ui(11, color: Palette.dim3)),
+                  ),
+              ],
+            ),
           ),
         ),
         if (showTime)

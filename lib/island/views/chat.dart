@@ -3,6 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/attachments.dart';
+import '../../core/layout.dart';
 import '../../core/models.dart';
 import '../../core/state.dart';
 import '../../core/theme.dart';
@@ -48,9 +50,11 @@ class _ChatViewState extends State<ChatView> {
 
   Future<void> _send() async {
     final t = _text.text.trim();
-    if (t.isEmpty || widget.state.chatBusy) return;
+    final files = List<Attachment>.from(widget.state.pendingFiles);
+    if ((t.isEmpty && files.isEmpty) || widget.state.chatBusy) return;
     _text.clear();
-    await ChatRunner.send(widget.state, widget.chat, t, onUpdate: _scrollDown);
+    widget.state.clearFiles();
+    await ChatRunner.send(widget.state, widget.chat, t, files: files, onUpdate: _scrollDown);
     _focus.requestFocus();
   }
 
@@ -93,10 +97,13 @@ class _ChatViewState extends State<ChatView> {
                     itemBuilder: (_, i) => _Bubble(msgs[i]),
                   ),
           ),
+          if (widget.state.pendingFiles.isNotEmpty)
+            _FilesRow(files: widget.state.pendingFiles, onRemove: widget.state.removeFile),
           _Field(
             controller: _text,
             focus: _focus,
             busy: widget.state.chatBusy,
+            hasFiles: widget.state.pendingFiles.isNotEmpty,
             onSend: _send,
             onEscape: () {
               _focus.unfocus();
@@ -227,7 +234,99 @@ class _Bubble extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: Palette.hairline),
         ),
-        child: SelectableText(m.text, style: ui(12.5, height: 1.35)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SelectableText(m.text, style: ui(12.5, height: 1.35)),
+            if (m.files.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [for (final f in m.files) _FileChip(name: f, kind: Attachment.kindOf(f))],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Les fichiers posés sur l'île, en attente au-dessus du champ ; ✕ pour en retirer un.
+class _FilesRow extends StatelessWidget {
+  const _FilesRow({required this.files, required this.onRemove});
+  final List<Attachment> files;
+  final ValueChanged<Attachment> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: filesRowH,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.only(bottom: 6, left: 2),
+        children: [
+          for (final f in files) ...[
+            _FileChip(name: f.name, kind: f.kind, detail: f.sizeLabel, onRemove: () => onRemove(f)),
+            const SizedBox(width: 6),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FileChip extends StatelessWidget {
+  const _FileChip({required this.name, required this.kind, this.detail = '', this.onRemove});
+  final String name;
+  final AttachmentKind kind;
+  final String detail;
+  final VoidCallback? onRemove;
+
+  static IconData iconFor(AttachmentKind k) => switch (k) {
+        AttachmentKind.image => Icons.image_outlined,
+        AttachmentKind.text => Icons.description_outlined,
+        AttachmentKind.folder => Icons.folder_outlined,
+        AttachmentKind.other => Icons.insert_drive_file_outlined,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 24,
+      padding: EdgeInsets.only(left: 8, right: onRemove == null ? 8 : 4),
+      decoration: BoxDecoration(
+        color: Palette.accent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Palette.accent2.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(iconFor(kind), size: 13, color: Palette.accent),
+          const SizedBox(width: 5),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 180),
+            child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: ui(11.5)),
+          ),
+          if (detail.isNotEmpty) ...[
+            const SizedBox(width: 5),
+            Text(detail, style: ui(10.5, color: Palette.dim3)),
+          ],
+          if (onRemove != null) ...[
+            const SizedBox(width: 2),
+            MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                onTap: onRemove,
+                child: const Padding(padding: EdgeInsets.all(3), child: Icon(Icons.close_rounded, size: 12, color: Palette.dim)),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -240,10 +339,12 @@ class _Field extends StatelessWidget {
     required this.busy,
     required this.onSend,
     required this.onEscape,
+    this.hasFiles = false,
   });
   final TextEditingController controller;
   final FocusNode focus;
   final bool busy;
+  final bool hasFiles;
   final VoidCallback onSend;
   final VoidCallback onEscape;
 
@@ -272,7 +373,7 @@ class _Field extends StatelessWidget {
                 decoration: InputDecoration(
                   isDense: true,
                   border: InputBorder.none,
-                  hintText: 'Écris à Fractus…',
+                  hintText: hasFiles ? 'Qu\'est-ce que j\'en fais ? (Entrée pour simplement regarder)' : 'Écris à Fractus…',
                   hintStyle: ui(13, color: Palette.dim3),
                 ),
                 textInputAction: TextInputAction.send,

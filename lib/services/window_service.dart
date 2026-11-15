@@ -81,6 +81,7 @@ class WindowService {
       state.view,
       chatCount: state.chat.length,
       questionPicker: state.pendingApproval?.isQuestion == true,
+      files: state.pendingFiles.isNotEmpty,
     );
     return Rect.fromLTWH((panelW - s.width) / 2, 0, s.width, s.height);
   }
