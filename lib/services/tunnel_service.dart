@@ -94,13 +94,18 @@ class TunnelService extends ChangeNotifier {
     final total = res.contentLength ?? 0;
     final sink = part.openWrite();
     var done = 0;
+    var lastPct = -1;
     try {
       await for (final chunk in res.stream) {
         sink.add(chunk);
         done += chunk.length;
         if (total > 0) {
           progress = done / total;
-          notifyListeners();
+          final pct = (progress * 100).floor();
+          if (pct != lastPct) {
+            lastPct = pct;
+            notifyListeners();
+          }
         }
       }
     } finally {

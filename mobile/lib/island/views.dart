@@ -920,6 +920,21 @@ class _PhoneSettingsState extends State<PhoneSettings> {
   bool _testing = false;
   bool _notify = false;
   bool _manual = false;
+  List<String>? _diag;
+  bool _diagRunning = false;
+
+  Future<void> _runDiag() async {
+    setState(() {
+      _diagRunning = true;
+      _diag = ['Diagnostic en cours…'];
+    });
+    final lines = await PcLink.diagnose(_code.text.trim(), widget.link.info);
+    if (!mounted) return;
+    setState(() {
+      _diagRunning = false;
+      _diag = lines;
+    });
+  }
 
   @override
   void initState() {
@@ -1156,6 +1171,8 @@ class _PhoneSettingsState extends State<PhoneSettings> {
               IslandButton(label: _testing ? 'Connexion…' : 'Se connecter', primary: true, onTap: _testing ? () {} : _connect),
               const SizedBox(width: 8),
               IslandButton(label: 'Scanner le QR code', onTap: _scan),
+              const SizedBox(width: 8),
+              IslandButton(label: _diagRunning ? 'Test…' : 'Diagnostic', onTap: _diagRunning ? () {} : _runDiag),
               const Spacer(),
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
@@ -1167,6 +1184,15 @@ class _PhoneSettingsState extends State<PhoneSettings> {
               ),
             ],
           ),
+          if (_diag != null) ...[
+            const SizedBox(height: 6),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: Palette.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: Palette.hairline)),
+              child: SelectableText(_diag!.join('\n'), style: mono(11, color: Palette.dim)),
+            ),
+          ],
           const SizedBox(height: 6),
           Text(
             widget.link.online

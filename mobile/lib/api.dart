@@ -282,6 +282,71 @@ class PcLink extends ChangeNotifier {
     return null;
   }
 
+  /// Le diagnostic, étape par étape, en français : ce qui marche et ce qui coince.
+  static Future<List<String>> diagnose(String code, PcConnectionInfo? current) async {
+    final out = <String>[];
+    final token = Rendezvous.normalize(code.isEmpty ? (current?.token ?? '') : code);
+    // 1. Internet sur le téléphone ?
+    try {
+      final r = await http.get(Uri.parse('${Rendezvous.server}/v1/health')).timeout(const Duration(seconds: 8));
+      out.add(r.statusCode == 200 ? '✓ Internet sur le téléphone' : '✗ Internet : réponse ${r.statusCode}');
+    } catch (e) {
+      out.add('✗ Pas d\'Internet sur le téléphone (ou ntfy.sh bloqué) : $e');
+    }
+    // 2. Le PC s'annonce-t-il avec ce code ?
+    final hosts = <String>{...?current?.hosts};
+    var port = current?.port ?? 7790;
+    if (token.length < 6) {
+      out.add('✗ Code vide ou trop court (8 caractères)');
+    } else {
+      try {
+        final r = await http.get(Rendezvous.pollUri(token)).timeout(const Duration(seconds: 10));
+        final p = r.statusCode == 200 ? Rendezvous.latest(token, r.body) : null;
+        if (p == null) {
+          out.add('✗ Aucun PC ne s\'annonce avec le code $token (PC à jour ? Réglages → Téléphone activé ? même code ?)');
+        } else {
+          final at = DateTime.tryParse('${p['at'] ?? ''}')?.toLocal();
+          final age = at == null ? '' : ' (il y a ${DateTime.now().difference(at).inMinutes} min)';
+          out.add('✓ PC « ${p['host'] ?? '?'} » annoncé$age');
+          if (p['port'] is int) port = p['port'] as int;
+          for (final a in (p['addresses'] is List ? p['addresses'] as List : const [])) {
+            hosts.add('$a');
+          }
+          final url = '${p['url'] ?? ''}';
+          if (PcConnectionInfo.isTunnel(url)) {
+            hosts.add(url);
+          } else {
+            out.add('✗ Le PC n\'annonce pas d\'adresse Internet (ligne « Accès depuis Internet » pas verte sur le PC)');
+          }
+        }
+      } catch (e) {
+        out.add('✗ Point de rendez-vous injoignable : $e');
+      }
+    }
+    // 3. Chaque adresse : joignable ? code accepté ?
+    if (hosts.isEmpty) out.add('✗ Aucune adresse à essayer');
+    await Future.wait([
+      for (final h in hosts)
+        () async {
+          final label = PcConnectionInfo.isTunnel(h) ? 'Internet' : 'Wi-Fi';
+          final conn = PcConnectionInfo(host: h, port: port, token: token);
+          try {
+            await PcClient(conn).ping().timeout(const Duration(seconds: 7));
+          } catch (e) {
+            out.add('✗ $label ${_short(h)} : injoignable (${e is PcError ? e.message : 'pas de réponse'})');
+            return;
+          }
+          try {
+            await PcClient(conn).status().timeout(const Duration(seconds: 7));
+            out.add('✓ $label ${_short(h)} : répond, code accepté');
+          } catch (e) {
+            out.add('✗ $label ${_short(h)} : répond mais ${e is PcError ? e.message : 'erreur'}');
+          }
+        }(),
+    ]);
+    return out;
+  }
+
   /// Les adresses de `i.hosts` qui répondent (avec le code), en parallèle.
   static Future<List<String>> probeAll(PcConnectionInfo i) async {
     final ok = <String>[];
