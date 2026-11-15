@@ -132,6 +132,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
+      HAS_KEY: ${{ secrets.ANDROID_KEYSTORE_B64 != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -154,18 +155,21 @@ jobs:
         # fichiers (manifest, Kotlin, layouts, Dart) sont versionnés et ne sont pas écrasés.
         run: flutter create --platforms=android --project-name fractus_mobile --org app.fractus --no-pub .
 
-      - name: Signing key (release)
+      - name: Clé de release (secret ANDROID_KEYSTORE_B64)
+        if: env.HAS_KEY == 'true'
         working-directory: mobile
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
         # Un seul secret suffit : ANDROID_KEYSTORE_B64 (le keystore en base64, mot de passe et
         # alias « fractus »). L'APK est alors toujours signé pareil : les mises à jour s'installent
-        # par-dessus. Sans secret : clé de debug (il faut désinstaller avant d'installer).
-        # Facultatif : ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD.
+        # par-dessus. Facultatif : ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD.
         run: |
-          if [ -z "$KEYSTORE_B64" ]; then echo "Pas de clé de release : signature debug"; exit 0; fi
           echo "$KEYSTORE_B64" | tr -d ' \n\r' | base64 -d > android/app/fractus-release.keystore
           python3 tool/sign_release.py android/app/build.gradle.kts
+
+      - name: Pas de clé de release — signature debug
+        if: env.HAS_KEY != 'true'
+        run: echo "Secret ANDROID_KEYSTORE_B64 absent : l'APK sera signé avec une clé de debug (il faudra désinstaller avant d'installer)."
 
       - name: Build APK
         working-directory: mobile
@@ -179,6 +183,18 @@ jobs:
           flutter pub get
           flutter build apk --release
           cp build/app/outputs/flutter-apk/app-release.apk ../Fractus-Android.apk
+
+      - name: Vérifier la signature de l'APK
+        working-directory: mobile
+        run: |
+          AS=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$AS" verify --print-certs build/app/outputs/flutter-apk/app-release.apk > /tmp/certs.txt
+          cat /tmp/certs.txt
+          if [ "$HAS_KEY" = "true" ] && grep -q "Android Debug" /tmp/certs.txt; then
+            echo "::error::L'APK est signé avec la clé de debug alors que le secret ANDROID_KEYSTORE_B64 existe."
+            exit 1
+          fi
+          { echo "### Signature de l'APK"; echo '```'; grep -i "DN:\|SHA-256" /tmp/certs.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload artifact (apk)
         uses: actions/upload-artifact@v4
