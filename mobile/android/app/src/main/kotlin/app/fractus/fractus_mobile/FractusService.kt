@@ -26,8 +26,9 @@ import java.net.URL
 
 /** La connexion au PC telle que l'appli Flutter l'a enregistrée (shared_preferences). */
 object PcPrefs {
-    data class Conn(val host: String, val port: Int, val token: String) {
+    data class Conn(val host: String, val port: Int, val token: String, val hosts: List<String> = listOf(host)) {
         val base: String get() = "http://$host:$port"
+        fun at(h: String) = Conn(h, port, token, hosts)
     }
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
@@ -42,7 +43,28 @@ object PcPrefs {
         } catch (_: ClassCastException) {
             p.getInt("flutter.port", 7790)
         }
-        return Conn(host, port, token)
+        // Toutes les adresses connues (Wi-Fi, Tailscale…), la courante d'abord.
+        val hosts = ArrayList<String>()
+        hosts.add(host)
+        for (h in (p.getString("flutter.hosts", "") ?: "").split(",")) {
+            val t = h.trim()
+            if (t.isNotEmpty() && !hosts.contains(t)) hosts.add(t)
+        }
+        return Conn(host, port, token, hosts)
+    }
+
+    /** Essaie chaque adresse jusqu'à ce qu'une accepte le POST. */
+    fun postAny(conn: Conn, path: String, body: JSONObject) {
+        var last: Exception? = null
+        for (h in conn.hosts) {
+            try {
+                post(conn.at(h), path, body)
+                return
+            } catch (e: Exception) {
+                last = e
+            }
+        }
+        if (last != null) throw last
     }
 
     fun notifyEnabled(ctx: Context): Boolean = prefs(ctx).getBoolean("flutter.bg_notify", false)
@@ -152,13 +174,25 @@ class FractusService : Service() {
             }
             var conn: HttpURLConnection? = null
             try {
-                conn = (URL("${c.base}/api/events").openConnection() as HttpURLConnection).apply {
-                    setRequestProperty("Authorization", "Bearer ${c.token}")
-                    setRequestProperty("Accept", "text/event-stream")
-                    connectTimeout = 6000
-                    readTimeout = 70000 // le PC envoie un « ping » toutes les 20 s
+                // On essaie chaque adresse connue (Wi-Fi puis Tailscale, ou l'inverse) : la première qui répond.
+                var opened: HttpURLConnection? = null
+                var firstError: Exception? = null
+                for (h in c.hosts) {
+                    try {
+                        val cc = (URL("http://$h:${c.port}/api/events").openConnection() as HttpURLConnection).apply {
+                            setRequestProperty("Authorization", "Bearer ${c.token}")
+                            setRequestProperty("Accept", "text/event-stream")
+                            connectTimeout = 5000
+                            readTimeout = 70000 // le PC envoie un « ping » toutes les 20 s
+                        }
+                        if (cc.responseCode != 200) throw IOException("HTTP ${cc.responseCode}")
+                        opened = cc
+                        break
+                    } catch (e: Exception) {
+                        if (firstError == null) firstError = e
+                    }
                 }
-                if (conn.responseCode != 200) throw IOException("HTTP ${conn.responseCode}")
+                conn = opened ?: throw (firstError ?: IOException("aucune adresse"))
                 backoff = 2
                 val reader = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8))
                 val data = StringBuilder()
@@ -333,7 +367,7 @@ class FractusActionReceiver : BroadcastReceiver() {
         val result = goAsync()
         Thread {
             try {
-                PcPrefs.post(conn, "/api/approvals/decide", JSONObject().put("requestId", requestId).put("decision", decision))
+                PcPrefs.postAny(conn, "/api/approvals/decide", JSONObject().put("requestId", requestId).put("decision", decision))
             } catch (_: Exception) {
             }
             (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(FractusService.ID_ASK)

@@ -113,6 +113,7 @@ class PcStatus {
   PcStatus.fromJson(Map j)
       : version = '${j['version'] ?? ''}',
         host = '${j['host'] ?? ''}',
+        addresses = ((j['addresses'] as List?) ?? const []).map((a) => '$a').toList(),
         botState = '${j['botState'] ?? 'idle'}',
         chatBusy = j['chatBusy'] == true,
         queue = (j['queue'] is num) ? (j['queue'] as num).toInt() : 0,
@@ -127,6 +128,8 @@ class PcStatus {
         settings = j['settings'] is Map ? PcSettings.fromJson(j['settings'] as Map) : null;
 
   final String version, host, botState;
+  /// Les adresses où le PC est joignable (Wi-Fi, Tailscale…).
+  final List<String> addresses;
   final bool chatBusy;
   final int queue;
   final List<PcSession> sessions;

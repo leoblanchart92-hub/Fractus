@@ -49,6 +49,10 @@ const List<String> uiFontFallback = [
 
 const List<String> monoFontFallback = ['Cascadia Mono', 'Consolas', 'monospace'];
 
+/// Facteur des surfaces tactiles (boutons, onglets). 1 sur le PC ; le téléphone
+/// le monte un peu pour que les doigts s'y retrouvent, sans toucher aux polices.
+double touchScale = 1.0;
+
 TextStyle ui(double size, {FontWeight weight = FontWeight.w400, Color color = Palette.ink, double? height}) {
   return TextStyle(
     fontFamily: 'Segoe UI',

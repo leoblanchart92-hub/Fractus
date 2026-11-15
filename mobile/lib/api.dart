@@ -154,21 +154,38 @@ class PcLink extends ChangeNotifier {
     _generation++;
   }
 
+  /// Par où on passe en ce moment : « Wi-Fi », « Tailscale »… (vide hors ligne).
+  String get network => online && info != null ? PcConnectionInfo.networkLabel(info!.host) : '';
+
   Future<void> _loop(int gen) async {
     var backoff = 1;
     while (_running && gen == _generation) {
-      final c = client;
-      if (c == null) {
+      var i = info;
+      if (i == null || !configured) {
         await Future<void>.delayed(const Duration(seconds: 1));
         continue;
       }
       try {
+        // Plusieurs adresses connues : la première qui répond gagne (Wi-Fi chez
+        // soi, Tailscale ailleurs). On ne change d'adresse que si la nôtre se tait.
+        if (i.hosts.length > 1) {
+          final h = await _firstAlive(i);
+          if (gen != _generation) return;
+          if (h != null && h != i.host) {
+            i = i.withHost(h);
+            info = i;
+            client = PcClient(i);
+            unawaited(Prefs.save(i));
+          }
+        }
+        final c = client ??= PcClient(i);
         await for (final s in c.events()) {
           if (gen != _generation) return;
           status = s;
           online = true;
           error = null;
           backoff = 1;
+          _learnAddresses(s);
           notifyListeners();
           unawaited(onStatus?.call(s));
         }
@@ -185,6 +202,47 @@ class PcLink extends ChangeNotifier {
       await Future<void>.delayed(Duration(seconds: backoff));
       backoff = (backoff * 2).clamp(1, 15);
     }
+  }
+
+  /// Interroge toutes les adresses en parallèle ; la première qui répond (notre
+  /// adresse actuelle d'abord, si elle répond dans la seconde).
+  Future<String?> _firstAlive(PcConnectionInfo i) async {
+    final completer = Completer<String?>();
+    var pending = i.hosts.length;
+    String? firstOther;
+    Future<void> probe(String h) async {
+      try {
+        await PcClient(i.withHost(h)).ping();
+        if (!completer.isCompleted) {
+          if (h == i.host) {
+            completer.complete(h);
+          } else {
+            firstOther ??= h;
+          }
+        }
+      } catch (_) {}
+      if (--pending == 0 && !completer.isCompleted) completer.complete(firstOther);
+    }
+
+    for (final h in i.hosts) {
+      unawaited(probe(h));
+    }
+    // L'adresse actuelle a une seconde d'avance ; sinon on prend la première autre.
+    unawaited(Future<void>.delayed(const Duration(milliseconds: 1200)).then((_) {
+      if (!completer.isCompleted && firstOther != null) completer.complete(firstOther);
+    }));
+    return completer.future.timeout(const Duration(seconds: 6), onTimeout: () => firstOther);
+  }
+
+  /// Le PC nous dit où il est joignable : on retient ses adresses pour plus tard.
+  void _learnAddresses(PcStatus s) {
+    final i = info;
+    if (i == null || s.addresses.isEmpty) return;
+    final fresh = s.addresses.where((a) => !i.hosts.contains(a)).toList();
+    if (fresh.isEmpty) return;
+    info = i.withHosts(fresh);
+    unawaited(Prefs.save(info!));
+    notifyListeners();
   }
 
   /// Appelé à chaque nouvel état (le widget d'écran d'accueil s'en sert).

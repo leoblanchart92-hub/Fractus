@@ -3,8 +3,10 @@
 // journal, réglages), nourries par l'état que le PC envoie.
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../api.dart';
 import '../core/layout.dart';
@@ -33,8 +35,9 @@ String _when(DateTime d) {
 // ─── Vue d'ensemble : la session en avant, ses étapes en direct, les autres ───
 
 class PhoneOverview extends StatefulWidget {
-  const PhoneOverview({super.key, required this.link});
+  const PhoneOverview({super.key, required this.link, required this.onChat});
   final PcLink link;
+  final VoidCallback onChat;
 
   @override
   State<PhoneOverview> createState() => _PhoneOverviewState();
@@ -75,8 +78,49 @@ class _PhoneOverviewState extends State<PhoneOverview> {
             ),
           ),
         ],
+        const SizedBox(height: 8),
+        QuickAsk(link: widget.link, onSent: widget.onChat),
       ],
     );
+  }
+}
+
+/// Le champ « Demande à Fractus… » sous les cartes : on écrit, ça part au PC,
+/// et on bascule sur le chat pour voir la réponse.
+class QuickAsk extends StatefulWidget {
+  const QuickAsk({super.key, required this.link, required this.onSent});
+  final PcLink link;
+  final VoidCallback onSent;
+
+  @override
+  State<QuickAsk> createState() => _QuickAskState();
+}
+
+class _QuickAskState extends State<QuickAsk> {
+  final TextEditingController _text = TextEditingController();
+  final FocusNode _focus = FocusNode();
+
+  @override
+  void dispose() {
+    _text.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final t = _text.text.trim();
+    if (t.isEmpty) return;
+    _text.clear();
+    _focus.unfocus();
+    HapticFeedback.lightImpact();
+    await widget.link.run((c) => c.sendChat(t));
+    widget.onSent();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final busy = widget.link.status?.chatBusy ?? false;
+    return _Field(controller: _text, focus: _focus, busy: busy, onSend: _send, hint: 'Demande à Fractus…');
   }
 }
 
@@ -215,14 +259,14 @@ class PhoneEmpty extends StatelessWidget {
             style: ui(12.5, color: Palette.dim, height: 1.35),
           ),
           const SizedBox(height: 14),
-          Row(
-            children: [
-              if (online)
-                IslandButton(label: 'Demander à Fractus', primary: true, onTap: onChat)
-              else
+          if (online)
+            QuickAsk(link: link, onSent: onChat)
+          else
+            Row(
+              children: [
                 IslandButton(label: 'Réessayer', primary: true, onTap: link.restart),
-            ],
-          ),
+              ],
+            ),
         ],
       ),
     );
@@ -264,7 +308,10 @@ class PhoneApproval extends StatelessWidget {
     final s = link.status!.sessions.where((x) => x.project == a.project).firstOrNull;
     final agent = s?.agent ?? (a.project == 'Fractus' ? 'Fractus' : 'Claude Code');
     final color = colorForProject(a.project);
-    void decide(String d) => link.run((c) => c.decide(a.requestId, d));
+    void decide(String d) {
+      HapticFeedback.mediumImpact();
+      link.run((c) => c.decide(a.requestId, d));
+    }
     return IslandCard(
       wash: Wash.amber,
       padding: _cardPad,
@@ -477,8 +524,10 @@ class _PhoneChatState extends State<PhoneChat> {
                 : ListView.builder(
                     controller: _scroll,
                     padding: const EdgeInsets.only(bottom: 8),
-                    itemCount: msgs.length,
-                    itemBuilder: (_, i) => _Bubble(msgs[i]),
+                    itemCount: msgs.length + (busy ? 1 : 0),
+                    itemBuilder: (_, i) => i < msgs.length
+                        ? _Bubble(msgs[i], showTime: i == msgs.length - 1 || msgs[i + 1].role != msgs[i].role)
+                        : const _Typing(),
                   ),
           ),
           if (quick.isNotEmpty && msgs.isEmpty)
@@ -497,6 +546,54 @@ class _PhoneChatState extends State<PhoneChat> {
             ),
           _Field(controller: _text, focus: _focus, busy: busy, onSend: _send),
         ],
+      ),
+    );
+  }
+}
+
+/// « Fractus écrit… » : trois points qui respirent, pendant qu'il répond.
+class _Typing extends StatefulWidget {
+  const _Typing();
+
+  @override
+  State<_Typing> createState() => _TypingState();
+}
+
+class _TypingState extends State<_Typing> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(top: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(color: Palette.card, borderRadius: BorderRadius.circular(14), border: Border.all(color: Palette.hairline)),
+        child: AnimatedBuilder(
+          animation: _c,
+          builder: (_, __) => Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < 3; i++)
+                Container(
+                  width: 6,
+                  height: 6,
+                  margin: EdgeInsets.only(right: i < 2 ? 4 : 0),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Palette.accent.withValues(alpha: 0.35 + 0.65 * (0.5 + 0.5 * math.sin((_c.value * 2 * math.pi) - i * 1.1))),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -574,35 +671,61 @@ class _TopBar extends StatelessWidget {
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble(this.m);
+  const _Bubble(this.m, {this.showTime = false});
   final PcMessage m;
+  final bool showTime;
 
   @override
   Widget build(BuildContext context) {
     final user = m.role == 'user';
-    return Align(
-      alignment: user ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(top: 6),
-        constraints: const BoxConstraints(maxWidth: 420),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          color: user ? Palette.tabOn : Palette.card,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Palette.hairline),
+    return Column(
+      crossAxisAlignment: user ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onLongPress: () {
+            Clipboard.setData(ClipboardData(text: m.text));
+            HapticFeedback.selectionClick();
+            ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+              content: Text('Copié', style: ui(12)),
+              backgroundColor: Palette.tabOn,
+              duration: const Duration(milliseconds: 900),
+              behavior: SnackBarBehavior.floating,
+            ));
+          },
+          child: Container(
+            margin: const EdgeInsets.only(top: 6),
+            constraints: const BoxConstraints(maxWidth: 420),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: user ? Palette.tabOn : Palette.card,
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(14),
+                topRight: const Radius.circular(14),
+                bottomLeft: Radius.circular(user ? 14 : 4),
+                bottomRight: Radius.circular(user ? 4 : 14),
+              ),
+              border: Border.all(color: Palette.hairline),
+            ),
+            child: Text(m.text, style: ui(12.5, height: 1.35)),
+          ),
         ),
-        child: SelectableText(m.text, style: ui(12.5, height: 1.35)),
-      ),
+        if (showTime)
+          Padding(
+            padding: const EdgeInsets.only(top: 2, left: 6, right: 6),
+            child: Text(_hm(m.at), style: ui(9.5, color: Palette.dim4)),
+          ),
+      ],
     );
   }
 }
 
 class _Field extends StatelessWidget {
-  const _Field({required this.controller, required this.focus, required this.busy, required this.onSend});
+  const _Field({required this.controller, required this.focus, required this.busy, required this.onSend, this.hint = 'Écris à Fractus…'});
   final TextEditingController controller;
   final FocusNode focus;
   final bool busy;
   final VoidCallback onSend;
+  final String hint;
 
   @override
   Widget build(BuildContext context) {
@@ -625,7 +748,7 @@ class _Field extends StatelessWidget {
               decoration: InputDecoration(
                 isDense: true,
                 border: InputBorder.none,
-                hintText: 'Écris à Fractus…',
+                hintText: hint,
                 hintStyle: ui(13, color: Palette.dim3),
               ),
               textInputAction: TextInputAction.send,
@@ -985,9 +1108,42 @@ class _PhoneSettingsState extends State<PhoneSettings> {
           ),
           const SizedBox(height: 6),
           Text(
-            widget.link.online ? '● ${widget.link.status?.host ?? ''} · Fractus ${widget.link.status?.version ?? ''}' : '○ hors ligne',
+            widget.link.online
+                ? '● ${widget.link.status?.host ?? ''} · Fractus ${widget.link.status?.version ?? ''} · par ${widget.link.network}'
+                : '○ hors ligne',
             style: ui(11, color: widget.link.online ? Palette.green2 : Palette.dim3),
           ),
+          if ((widget.link.info?.hosts.length ?? 0) > 0) ...[
+            const SizedBox(height: 6),
+            Text('ADRESSES CONNUES DU PC', style: ui(9.5, weight: FontWeight.w700, color: Palette.dim4)),
+            for (final h in widget.link.info!.hosts)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(
+                  children: [
+                    Icon(
+                      PcConnectionInfo.isTailscale(h) ? Icons.public_rounded : Icons.wifi_rounded,
+                      size: 12,
+                      color: h == widget.link.info!.host && widget.link.online ? Palette.green2 : Palette.dim3,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(h, style: mono(11.5, color: h == widget.link.info!.host ? Palette.ink : Palette.dim)),
+                    const SizedBox(width: 6),
+                    Text(
+                      PcConnectionInfo.isTailscale(h) ? 'Tailscale — de partout' : 'Wi-Fi — à la maison',
+                      style: ui(10.5, color: Palette.dim4),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 4),
+            Text(
+              widget.link.info!.hosts.any(PcConnectionInfo.isTailscale)
+                  ? 'Hors de chez toi, ouvre Tailscale sur le téléphone : Fractus bascule tout seul sur l\'adresse Tailscale.'
+                  : 'Pour te connecter hors de chez toi : installe Tailscale sur le PC (Réglages → Téléphone → Installer Tailscale) et sur le téléphone, même compte. L\'adresse s\'ajoutera ici toute seule.',
+              style: ui(11, color: Palette.dim3, height: 1.3),
+            ),
+          ],
           _section('Notifications'),
           _toggle('Prévenir quand Fractus attend ton accord, même appli fermée', _notify, _setNotify),
           Text(

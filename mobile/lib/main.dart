@@ -30,6 +30,8 @@ Future<void> main() async {
     statusBarIconBrightness: Brightness.light,
     systemNavigationBarColor: Color(0xFF05060B),
   ));
+  // Des boutons et onglets un peu plus grands pour les doigts (les polices suivent via textScaler).
+  touchScale = 1.3;
   runApp(const FractusMobileApp());
 }
 
@@ -57,6 +59,10 @@ class FractusMobileApp extends StatelessWidget {
         ),
         textSelectionTheme: const TextSelectionThemeData(cursorColor: Palette.ink, selectionColor: Color(0x5538BDF8)),
       ),
+      builder: (context, child) {
+        final mq = MediaQuery.of(context);
+        return MediaQuery(data: mq.copyWith(textScaler: const TextScaler.linear(1.08)), child: child!);
+      },
       home: const Shell(),
     );
   }

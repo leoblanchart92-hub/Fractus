@@ -94,6 +94,8 @@ class _SettingsViewState extends State<SettingsView> {
       await script.writeAsString([
         'netsh advfirewall firewall delete rule name="Fractus (telephone)" | Out-Null',
         'netsh advfirewall firewall add rule name="Fractus (telephone)" dir=in action=allow protocol=TCP localport=$port profile=private,domain | Out-Null',
+        'netsh advfirewall firewall delete rule name="Fractus (telephone Tailscale)" | Out-Null',
+        'netsh advfirewall firewall add rule name="Fractus (telephone Tailscale)" dir=in action=allow protocol=TCP localport=$port remoteip=100.64.0.0/10 profile=any | Out-Null',
         'exit \$LASTEXITCODE',
       ].join('\r\n'));
       final args = "'-NoProfile','-ExecutionPolicy','Bypass','-File','${script.path}'";
@@ -102,9 +104,31 @@ class _SettingsViewState extends State<SettingsView> {
         '-Command',
         '\$p = Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidden -PassThru -ArgumentList $args; exit \$p.ExitCode',
       ]);
-      setState(() => _firewallMsg = r.exitCode == 0 ? 'Pare-feu ouvert sur le port $port (réseaux privés).' : 'Refusé ou échec (code ${r.exitCode}).');
+      setState(() => _firewallMsg = r.exitCode == 0 ? 'Pare-feu ouvert sur le port $port (réseaux privés + Tailscale).' : 'Refusé ou échec (code ${r.exitCode}).');
     } catch (e) {
       setState(() => _firewallMsg = 'Échec : $e');
+    }
+  }
+
+  String? _tailscaleMsg;
+
+  /// Installe Tailscale avec winget (UAC), ou ouvre la page de téléchargement.
+  Future<void> _installTailscale() async {
+    setState(() => _tailscaleMsg = 'Installation de Tailscale (winget, droits administrateur)…');
+    try {
+      final r = await Process.run('powershell.exe', [
+        '-NoProfile',
+        '-Command',
+        "\$p = Start-Process winget -Verb RunAs -Wait -PassThru -ArgumentList 'install','--id','Tailscale.Tailscale','-e','--accept-package-agreements','--accept-source-agreements'; exit \$p.ExitCode",
+      ]);
+      if (r.exitCode == 0) {
+        setState(() => _tailscaleMsg = 'Tailscale installé : ouvre-le et connecte-toi (même compte que sur le téléphone).');
+      } else {
+        await Process.run('cmd', ['/c', 'start', '', 'https://tailscale.com/download/windows']);
+        setState(() => _tailscaleMsg = 'winget a échoué (code ${r.exitCode}) : la page de téléchargement est ouverte.');
+      }
+    } catch (e) {
+      setState(() => _tailscaleMsg = 'Échec : $e');
     }
   }
 
@@ -360,7 +384,7 @@ class _SettingsViewState extends State<SettingsView> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: QrImageView(
-                        data: 'fractus://pair?host=${_addresses.first}&port=${widget.remote.port ?? s.remotePort}&code=${s.remoteToken}',
+                        data: 'fractus://pair?host=${_addresses.first}&hosts=${_addresses.join(',')}&port=${widget.remote.port ?? s.remotePort}&code=${s.remoteToken}',
                         size: 120,
                         padding: const EdgeInsets.all(6),
                         backgroundColor: Colors.white,
@@ -388,6 +412,8 @@ class _SettingsViewState extends State<SettingsView> {
                 overflow: TextOverflow.ellipsis,
                 style: ui(11, color: Palette.dim3),
               ),
+              const SizedBox(height: 6),
+              _remoteAccess(),
             ],
             _section('Mises à jour'),
             _toggle('Chercher les mises à jour automatiquement', s.autoUpdate, (v) {
@@ -479,6 +505,40 @@ class _SettingsViewState extends State<SettingsView> {
     } finally {
       if (mounted) setState(() => _testing = false);
     }
+  }
+
+  /// Hors du Wi-Fi : Tailscale (gratuit, chiffré, sans serveur à nous). Détecté par son adresse 100.x.
+  Widget _remoteAccess() {
+    final ts = _addresses.where(RemoteServer.isTailscale).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(ts.isEmpty ? Icons.public_off_rounded : Icons.public_rounded, size: 13, color: ts.isEmpty ? Palette.dim3 : Palette.green2),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                ts.isEmpty
+                    ? 'Hors de chez toi : installe Tailscale sur le PC et le téléphone (même compte). Le téléphone passera tout seul par là.'
+                    : 'Accès à distance actif : Tailscale ${ts.first}. Le téléphone s\'y connecte de partout (Tailscale ouvert sur le téléphone, même compte).',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: ui(11, color: ts.isEmpty ? Palette.dim3 : Palette.dim),
+              ),
+            ),
+            if (ts.isEmpty) ...[
+              const SizedBox(width: 6),
+              IslandButton(label: 'Installer Tailscale', compact: true, onTap: _installTailscale),
+            ],
+          ],
+        ),
+        if (_tailscaleMsg != null) ...[
+          const SizedBox(height: 3),
+          Text(_tailscaleMsg!, maxLines: 2, overflow: TextOverflow.ellipsis, style: ui(11, color: Palette.dim)),
+        ],
+      ],
+    );
   }
 
   Widget _modelPicker() {

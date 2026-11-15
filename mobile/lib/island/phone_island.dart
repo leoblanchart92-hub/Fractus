@@ -3,6 +3,7 @@
 // sous l'en-tête, et la carte du moment qui remplit le reste de l'écran.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../api.dart';
 import '../companion/bot_engine.dart';
@@ -34,8 +35,13 @@ class _PhoneIslandState extends State<PhoneIsland> {
   DateTime _lastSlap = DateTime.fromMillisecondsSinceEpoch(0);
   bool _greeted = false;
 
+  String? _lastPendingId;
+
   PcLink get link => widget.link;
   BotEngine get bot => widget.bot;
+
+  /// Les onglets qu'on parcourt d'un glissement horizontal.
+  static const List<PhoneView> _swipeOrder = [PhoneView.overview, PhoneView.prompt, PhoneView.journal, PhoneView.screen, PhoneView.settings];
 
   @override
   void initState() {
@@ -62,7 +68,32 @@ class _PhoneIslandState extends State<PhoneIsland> {
       _greeted = true;
       Future.delayed(const Duration(milliseconds: 300), bot.greet);
     }
+    // Une demande arrive : une petite vibration.
+    final pid = s?.pending?.requestId;
+    if (pid != null && pid != _lastPendingId) HapticFeedback.mediumImpact();
+    _lastPendingId = pid;
     setState(() {});
+  }
+
+  void _swipe(DragEndDetails d) {
+    final v = d.primaryVelocity ?? 0;
+    if (v.abs() < 250 || link.status?.pending != null || !link.configured) return;
+    final cur = _view == PhoneView.empty ? PhoneView.overview : _view;
+    final i = _swipeOrder.indexOf(cur);
+    if (i < 0) return;
+    final next = v < 0 ? i + 1 : i - 1;
+    if (next < 0 || next >= _swipeOrder.length) return;
+    HapticFeedback.selectionClick();
+    setState(() => _tab = _swipeOrder[next]);
+  }
+
+  /// Sous Fractus : le PC, et par où on passe.
+  String get _caption {
+    final s = link.status;
+    if (!link.configured) return 'Fractus';
+    if (!link.online || s == null) return link.error == null ? 'Connexion au PC…' : 'PC injoignable · nouvel essai…';
+    final host = s.host.isEmpty ? (link.info?.host ?? '') : s.host;
+    return '$host · ${link.network}';
   }
 
   PhoneView get _view {
@@ -117,7 +148,7 @@ class _PhoneIslandState extends State<PhoneIsland> {
     final top = mq.padding.top;
     final diameter = _botDiameter(view, keyboard);
     final botTop = top + 34 + 6;
-    final contentTop = botTop + diameter + 10;
+    final contentTop = botTop + diameter + (keyboard ? 10 : 22);
     final bottom = (keyboard ? mq.viewInsets.bottom : mq.padding.bottom) + 10;
     final w = mq.size.width;
 
@@ -141,11 +172,31 @@ class _PhoneIslandState extends State<PhoneIsland> {
             right: 10,
             top: contentTop,
             bottom: bottom,
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
-              child: KeyedSubtree(key: ValueKey(view), child: _viewFor(view)),
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragEnd: _swipe,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: KeyedSubtree(key: ValueKey(view), child: _viewFor(view)),
+              ),
             ),
           ),
+          // ── La légende sous Fractus : le PC et le réseau ────────────────
+          if (!keyboard)
+            Positioned(
+              left: 0,
+              width: w,
+              top: botTop + diameter - 2,
+              child: IgnorePointer(
+                child: Text(
+                  _caption,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: ui(10.5, color: link.online ? Palette.dim3 : Palette.amber),
+                ),
+              ),
+            ),
           // ── L'en-tête ──────────────────────────────────────────────────
           Positioned(left: 0, width: w, top: top, height: 34, child: _header(view, sessions)),
           // ── Fractus ────────────────────────────────────────────────────
@@ -223,7 +274,7 @@ class _PhoneIslandState extends State<PhoneIsland> {
   Widget _viewFor(PhoneView view) {
     switch (view) {
       case PhoneView.overview:
-        return PhoneOverview(link: link);
+        return PhoneOverview(link: link, onChat: () => setState(() => _tab = PhoneView.prompt));
       case PhoneView.empty:
         return PhoneEmpty(link: link, onChat: () => setState(() => _tab = PhoneView.prompt));
       case PhoneView.approval:

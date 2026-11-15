@@ -119,8 +119,8 @@ class _IslandButtonState extends State<IslandButton> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
-          height: widget.compact ? 24 : 28,
-          padding: EdgeInsets.symmetric(horizontal: widget.compact ? 10 : 14),
+          height: (widget.compact ? 24 : 28) * touchScale,
+          padding: EdgeInsets.symmetric(horizontal: (widget.compact ? 10 : 14) * touchScale),
           decoration: BoxDecoration(
             color: bg,
             gradient: widget.primary
@@ -350,13 +350,13 @@ class _HeaderTabState extends State<HeaderTab> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
-          width: 26,
-          height: 26,
+          width: 26 * touchScale,
+          height: 26 * touchScale,
           decoration: BoxDecoration(
             color: widget.on ? Palette.tabOn : (_hover ? const Color(0x14FFFFFF) : Colors.transparent),
             shape: BoxShape.circle,
           ),
-          child: Icon(widget.icon, size: widget.size, color: widget.on || _hover ? Palette.ink : Palette.dim2),
+          child: Icon(widget.icon, size: widget.size * touchScale, color: widget.on || _hover ? Palette.ink : Palette.dim2),
         ),
       ),
     );

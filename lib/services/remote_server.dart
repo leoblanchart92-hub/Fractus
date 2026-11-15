@@ -80,6 +80,9 @@ class RemoteServer {
         _journalListening = true;
       }
       _heartbeat = Timer.periodic(const Duration(seconds: 20), (_) => _broadcast(': ping\n\n'));
+      _addressTimer?.cancel();
+      _addressTimer = Timer.periodic(const Duration(seconds: 30), (_) => _refreshAddresses());
+      unawaited(_refreshAddresses());
     } catch (e) {
       error = 'Port $wantedPort indisponible : $e';
       port = null;
@@ -88,6 +91,8 @@ class RemoteServer {
 
   Future<void> stop() async {
     _heartbeat?.cancel();
+    _addressTimer?.cancel();
+    _addressTimer = null;
     _push?.cancel();
     for (final s in _streams.toList()) {
       try {
@@ -104,6 +109,27 @@ class RemoteServer {
     if (_listening) state.removeListener(_onState);
     if (_journalListening) journal.removeListener(_onState);
     stop();
+  }
+
+  /// Une adresse du réseau Tailscale (100.64.0.0/10) : joignable de partout.
+  static bool isTailscale(String a) {
+    final m = RegExp(r'^100\.(\d+)\.').firstMatch(a);
+    if (m == null) return false;
+    final second = int.tryParse(m.group(1)!) ?? 0;
+    return second >= 64 && second <= 127;
+  }
+
+  /// Les adresses connues du PC, rafraîchies régulièrement (envoyées au téléphone
+  /// pour qu'il sache où nous joindre : Wi-Fi à la maison, Tailscale ailleurs).
+  List<String> addresses = const [];
+  Timer? _addressTimer;
+
+  Future<void> _refreshAddresses() async {
+    final a = await localAddresses();
+    if (a.join(',') != addresses.join(',')) {
+      addresses = a;
+      _onState();
+    }
   }
 
   /// Les adresses IPv4 locales (pour afficher « 192.168.1.20:7790 »).
@@ -150,6 +176,8 @@ class RemoteServer {
       'app': 'fractus',
       'version': version(),
       'host': Platform.localHostname,
+      'addresses': addresses,
+      'port': port,
       'time': DateTime.now().toIso8601String(),
       'botState': state.botState.name,
       'chatBusy': state.chatBusy,
@@ -298,7 +326,7 @@ class RemoteServer {
     final path = req.uri.path;
     try {
       if (req.method == 'GET' && path == '/api/ping') {
-        return await _json(res, {'app': 'fractus', 'version': version(), 'host': Platform.localHostname});
+        return await _json(res, {'app': 'fractus', 'version': version(), 'host': Platform.localHostname, 'addresses': addresses});
       }
       if (!path.startsWith('/api/')) return await _json(res, {'error': 'not found'}, status: 404);
       if (!_authorized(req)) return await _json(res, {'error': 'code d\'appairage incorrect'}, status: 401);
