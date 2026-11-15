@@ -181,20 +181,33 @@ jobs:
           echo "Secret ANDROID_KEYSTORE_B64 absent - l'APK sera signé avec une clé de debug (il faudra désinstaller avant d'installer)."
 
       - name: Build APK
+        id: apk
         working-directory: mobile
         env:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || 'fractus' }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || 'fractus' }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD || 'fractus' }}
         run: |
-          # L'interface de l'île (Fractus, cartes, palette) est celle du PC : on la copie.
-          sh tool/sync_shared.sh
-          flutter pub get
-          rm -f test/widget_test.dart   # le squelette de flutter create ; nos tests sont dans test/*_test.dart
-          flutter analyze --no-fatal-infos --no-fatal-warnings
-          flutter test
-          flutter build apk --release
+          set -o pipefail
+          {
+            # L'interface de l'île (Fractus, cartes, palette) est celle du PC : on la copie.
+            sh tool/sync_shared.sh
+            flutter pub get
+            rm -f test/widget_test.dart   # le squelette de flutter create ; nos tests sont dans test/*_test.dart
+            echo "=== analyze ===" && flutter analyze --no-fatal-infos --no-fatal-warnings
+            echo "=== test ===" && flutter test
+            echo "=== build ===" && flutter build apk --release
+          } 2>&1 | tee ../ci-android.txt
           cp build/app/outputs/flutter-apk/app-release.apk ../Fractus-Android.apk
+
+      - name: Publier le journal Android (commentaire de commit)
+        if: always()
+        run: |
+          # Comme pour Windows : la fin du journal en commentaire du commit, pour lire l'erreur sans ouvrir les logs.
+          if [ "${{ steps.apk.outcome }}" = "success" ]; then status="✅ Build Android réussi"; else status="❌ Échec du build Android (${{ steps.apk.outcome }})"; fi
+          tail -n 160 ci-android.txt > /tmp/tail.txt 2>/dev/null || echo "(pas de journal)" > /tmp/tail.txt
+          body=$(printf '### %s\nRun : %s/%s/actions/runs/%s\n\n```text\n%s\n```' "$status" "${{ github.server_url }}" "${{ github.repository }}" "${{ github.run_id }}" "$(cat /tmp/tail.txt)")
+          gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$body" >/dev/null || echo "Commentaire impossible (droits ?)"
 
       - name: Vérifier la signature de l'APK
         working-directory: mobile
