@@ -149,6 +149,14 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Icône de l'appli versionnée ?
+        working-directory: mobile
+        # Garde-fou : nos icônes doivent être dans Git, sinon flutter create met celle par défaut.
+        run: |
+          for f in android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png; do
+            test -n "$(git ls-files "$f")" || { echo "::error::$f n'est pas versionné (gitignore ?)"; exit 1; }
+          done
+
       - name: Scaffold Android project
         working-directory: mobile
         # Le squelette Android (gradle, icônes, styles) est généré ici ; seuls nos

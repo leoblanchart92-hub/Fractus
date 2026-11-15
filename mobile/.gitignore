@@ -22,6 +22,7 @@ android/app/src/main/res/*
 !android/app/src/main/res/layout/
 !android/app/src/main/res/xml/
 !android/app/src/main/res/drawable/
+!android/app/src/main/res/mipmap-*/
 !android/app/src/main/res/values/
 android/app/src/main/res/values/*
 !android/app/src/main/res/values/colors.xml
