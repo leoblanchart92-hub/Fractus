@@ -16,6 +16,7 @@ import '../models.dart';
 import '../native.dart';
 import '../prefs.dart';
 import '../updater.dart';
+import '../voice.dart';
 import 'bridge.dart';
 import 'qr_scan.dart';
 import 'widgets.dart';
@@ -729,13 +730,17 @@ class _Field extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return AnimatedBuilder(animation: Voice.instance, builder: (context, _) => _build(context));
+  }
+
+  Widget _build(BuildContext context) {
     return Container(
       height: 42,
       padding: const EdgeInsets.only(left: 14, right: 6),
       decoration: BoxDecoration(
         color: Palette.card,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0x14FFFFFF)),
+        border: Border.all(color: Voice.instance.listening ? Palette.pink.withValues(alpha: 0.6) : const Color(0x14FFFFFF)),
       ),
       child: Row(
         children: [
@@ -748,14 +753,16 @@ class _Field extends StatelessWidget {
               decoration: InputDecoration(
                 isDense: true,
                 border: InputBorder.none,
-                hintText: hint,
-                hintStyle: ui(13, color: Palette.dim3),
+                hintText: Voice.instance.listening ? 'Je t\'écoute…' : hint,
+                hintStyle: ui(13, color: Voice.instance.listening ? Palette.pink : Palette.dim3),
               ),
               textInputAction: TextInputAction.send,
               onSubmitted: (_) => onSend(),
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
+          _MicButton(controller: controller, focus: focus),
+          const SizedBox(width: 4),
           GestureDetector(
             onTap: onSend,
             child: Container(
@@ -769,6 +776,60 @@ class _Field extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Le micro : on appuie, on parle, le texte s'écrit dans le champ ; on relit, on envoie.
+class _MicButton extends StatelessWidget {
+  const _MicButton({required this.controller, required this.focus});
+  final TextEditingController controller;
+  final FocusNode focus;
+
+  Future<void> _toggle(BuildContext context) async {
+    final v = Voice.instance;
+    if (v.listening) {
+      await v.stop();
+      return;
+    }
+    HapticFeedback.lightImpact();
+    focus.unfocus();
+    final base = controller.text.trimRight();
+    final ok = await v.start((text, done) {
+      final t = base.isEmpty ? text : '$base $text';
+      controller.value = TextEditingValue(text: t, selection: TextSelection.collapsed(offset: t.length));
+      if (done) HapticFeedback.selectionClick();
+    });
+    if (!ok && context.mounted && v.error != null) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+        content: Text(v.error!, style: ui(12)),
+        backgroundColor: Palette.tabOn,
+        behavior: SnackBarBehavior.floating,
+      ));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Voice.instance,
+      builder: (context, _) {
+        final on = Voice.instance.listening;
+        return GestureDetector(
+          onTap: () => _toggle(context),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: on ? Palette.pink.withValues(alpha: 0.25) : Palette.tabOn,
+              shape: BoxShape.circle,
+              border: Border.all(color: on ? Palette.pink : Palette.hairline),
+            ),
+            child: Icon(on ? Icons.graphic_eq_rounded : Icons.mic_none_rounded, size: 17, color: on ? Palette.pink : Palette.dim),
+          ),
+        );
+      },
     );
   }
 }
@@ -1245,6 +1306,34 @@ class _PhoneSettingsState extends State<PhoneSettings> {
                   ? 'Hors de chez toi, Fractus passe tout seul par Internet. Si le PC redémarre, il retrouve la nouvelle adresse grâce au code.'
                   : 'Le PC n\'a pas encore annoncé d\'adresse Internet : vérifie sur le PC que la ligne « Accès depuis Internet » est verte, puis reconnecte-toi avec le code.',
               style: ui(11, color: Palette.dim3, height: 1.3),
+            ),
+          ],
+          if (_manual) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Text('JOURNAL DE CONNEXION', style: ui(9.5, weight: FontWeight.w700, color: Palette.dim4)),
+                const Spacer(),
+                IslandButton(
+                  label: 'Copier',
+                  compact: true,
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: widget.link.log.join('\n')));
+                    setState(() => _message = 'Journal copié');
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Container(
+              width: double.infinity,
+              constraints: const BoxConstraints(maxHeight: 160),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: Palette.card, borderRadius: BorderRadius.circular(10), border: Border.all(color: Palette.hairline)),
+              child: SingleChildScrollView(
+                reverse: true,
+                child: Text(widget.link.log.isEmpty ? '(rien pour l\'instant)' : widget.link.log.join('\n'), style: mono(10.5, color: Palette.dim)),
+              ),
             ),
           ],
           _section('Notifications'),

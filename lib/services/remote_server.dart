@@ -64,6 +64,26 @@ class RemoteServer {
   HttpServer? _server;
   int? port;
   String? error;
+
+  /// Le journal de connexion, lisible : ce qui s'est passé entre le PC et le
+  /// téléphone (démarrages, connexions, codes refusés, tunnel, rendez-vous).
+  final List<String> log = [];
+  static const int _logMax = 200;
+
+  void note(String message) {
+    final n = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    log.add('${two(n.hour)}:${two(n.minute)}:${two(n.second)}  $message');
+    if (log.length > _logMax) log.removeRange(0, log.length - _logMax);
+  }
+
+  /// D'où vient une requête : l'adresse du téléphone, ou « Internet » via le tunnel.
+  static String _origin(HttpRequest req) {
+    final cf = req.headers.value('cf-connecting-ip');
+    if (cf != null && cf.isNotEmpty) return 'Internet ($cf)';
+    final a = req.connectionInfo?.remoteAddress.address ?? '?';
+    return a == '127.0.0.1' ? 'tunnel local' : 'Wi-Fi ($a)';
+  }
   final Set<HttpResponse> _streams = {};
   Timer? _push;
   Timer? _heartbeat;
@@ -77,6 +97,7 @@ class RemoteServer {
       _server = await HttpServer.bind(InternetAddress.anyIPv4, wantedPort, shared: true);
       port = _server!.port;
       error = null;
+      note('Serveur téléphone démarré (port $port)');
       _server!.listen(_handle, onError: (_) {});
       if (!_listening) {
         state.addListener(_onState);
@@ -93,6 +114,7 @@ class RemoteServer {
     } catch (e) {
       error = 'Port $wantedPort indisponible : $e';
       port = null;
+      note('Impossible de démarrer le serveur : $e');
     }
   }
 
@@ -114,6 +136,7 @@ class RemoteServer {
       } catch (_) {}
     }
     _streams.clear();
+    if (_server != null) note('Serveur téléphone arrêté');
     await _server?.close(force: true);
     _server = null;
     port = null;
@@ -138,6 +161,7 @@ class RemoteServer {
     if (t != null && tunnel!.online) a.add(t);
     if (a.join(',') != addresses.join(',')) {
       addresses = a;
+      note('Adresses du PC : ${a.join(', ')}');
       _onState();
       _publishSoon();
     }
@@ -193,6 +217,7 @@ class RemoteServer {
       if (r.statusCode >= 300) throw HttpException('HTTP ${r.statusCode}');
       rendezvousError = null;
       _lastPublishedAt = at;
+      note('Annonce déposée au point de rendez-vous (${payload.containsKey('url') ? 'Wi-Fi + Internet' : 'Wi-Fi seulement'})');
       _publishPeriodic?.cancel();
       _publishPeriodic = Timer.periodic(const Duration(hours: 4), (_) => publishRendezvous());
       // On vérifie, comme le ferait le téléphone, que tout est vraiment joignable.
@@ -200,6 +225,7 @@ class RemoteServer {
       _verifyTimer = Timer(const Duration(seconds: 8), () => verify());
     } catch (e) {
       rendezvousError = '$e';
+      note('Annonce impossible (ntfy.sh) : $e');
       // Pas d'Internet pour l'instant ? On réessaiera dans deux minutes.
       _publishDebounce?.cancel();
       _publishDebounce = Timer(const Duration(minutes: 2), () => publishRendezvous());
@@ -246,6 +272,9 @@ class RemoteServer {
     }
     verifiedAt = DateTime.now();
     verifyDetail = details.isEmpty ? null : details.join(' · ');
+    note(details.isEmpty
+        ? 'Vérification : annonce lisible ✓, tunnel joignable ${tunnelOk == true ? '✓' : '(pas de tunnel)'}'
+        : 'Vérification : ${details.join(' · ')}');
     state.touch();
     // On revérifie régulièrement (toutes les 10 min, ou vite si ça ne va pas).
     _verifyTimer?.cancel();
@@ -470,6 +499,7 @@ class RemoteServer {
       if (!path.startsWith('/api/')) return await _json(res, {'error': 'not found'}, status: 404);
       if (!_authorized(req)) {
         // Derrière le tunnel, n'importe qui peut frapper à la porte : on ralentit les mauvais codes.
+        note('Code refusé — ${_origin(req)} (${req.method} $path)');
         await _authFailed();
         return await _json(res, {'error': 'code d\'appairage incorrect'}, status: _authFails > 30 ? 429 : 401);
       }
@@ -487,7 +517,13 @@ class RemoteServer {
         res.write('data: ${jsonEncode(_status())}\n\n');
         await res.flush();
         _streams.add(res);
-        res.done.then((_) => _streams.remove(res), onError: (_) => _streams.remove(res));
+        final origin = _origin(req);
+        note('Téléphone connecté — $origin');
+        void gone(_) {
+          if (_streams.remove(res)) note('Téléphone déconnecté — $origin');
+        }
+
+        res.done.then(gone, onError: gone);
         return;
       }
 

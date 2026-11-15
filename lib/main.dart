@@ -69,6 +69,7 @@ Future<void> main() async {
   // Le tunnel Internet : le téléphone joint le PC de partout, sans Wi-Fi commun ni VPN.
   final tunnel = TunnelService();
   remote.tunnel = tunnel;
+  tunnel.onLog = remote.note;
   tunnel.addListener(() {
     unawaited(remote.refreshAddresses());
     state.touch();

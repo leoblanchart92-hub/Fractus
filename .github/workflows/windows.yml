@@ -190,6 +190,9 @@ jobs:
           # L'interface de l'île (Fractus, cartes, palette) est celle du PC : on la copie.
           sh tool/sync_shared.sh
           flutter pub get
+          rm -f test/widget_test.dart   # le squelette de flutter create ; nos tests sont dans test/*_test.dart
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
           flutter build apk --release
           cp build/app/outputs/flutter-apk/app-release.apk ../Fractus-Android.apk
 

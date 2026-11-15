@@ -126,6 +126,17 @@ class PcLink extends ChangeNotifier {
 
   bool get configured => info != null && info!.host.isNotEmpty && info!.token.isNotEmpty;
 
+  /// Le journal de connexion, lisible : à copier-coller quand ça ne marche pas.
+  final List<String> log = [];
+  bool _wasOnline = false;
+
+  void note(String message) {
+    final n = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    log.add('${two(n.hour)}:${two(n.minute)}:${two(n.second)}  $message');
+    if (log.length > 150) log.removeRange(0, log.length - 150);
+  }
+
   Future<void> load() async {
     info = await Prefs.load();
     client = configured ? PcClient(info!) : null;
@@ -133,6 +144,7 @@ class PcLink extends ChangeNotifier {
   }
 
   Future<void> setInfo(PcConnectionInfo i) async {
+    note('Connexion enregistrée : ${_short(i.host)} (${i.hosts.length} adresse${i.hosts.length > 1 ? 's' : ''})');
     await Prefs.save(i);
     info = i;
     client = configured ? PcClient(i) : null;
@@ -173,6 +185,7 @@ class PcLink extends ChangeNotifier {
           final h = await _firstAlive(i);
           if (gen != _generation) return;
           if (h != null && h != i.host) {
+            note('Bascule vers ${_short(h)} (${PcConnectionInfo.networkLabel(h)})');
             i = i.withHost(h);
             info = i;
             client = PcClient(i);
@@ -183,6 +196,10 @@ class PcLink extends ChangeNotifier {
         await for (final s in c.events()) {
           if (gen != _generation) return;
           status = s;
+          if (!_wasOnline) {
+            _wasOnline = true;
+            note('Connecté à ${s.host} via ${_short(i.host)} (${PcConnectionInfo.networkLabel(i.host)})');
+          }
           online = true;
           error = null;
           backoff = 1;
@@ -191,10 +208,14 @@ class PcLink extends ChangeNotifier {
           unawaited(onStatus?.call(s));
         }
         // Le flux s'est fermé proprement : on se reconnecte.
+        if (_wasOnline) note('Flux fermé par le PC, reconnexion');
+        _wasOnline = false;
       } catch (e) {
         if (gen != _generation) return;
         online = false;
         error = e is PcError ? e.message : 'PC injoignable';
+        if (_wasOnline || backoff == 1) note('Échec via ${_short(i.host)} : ${e is PcError ? e.message : e.runtimeType}');
+        _wasOnline = false;
         notifyListeners();
         if (e is PcError && e.status == 401) {
           await Future<void>.delayed(const Duration(seconds: 10));
@@ -236,7 +257,9 @@ class PcLink extends ChangeNotifier {
     unawaited(Future<void>.delayed(const Duration(milliseconds: 1200)).then((_) {
       if (!completer.isCompleted && firstOther != null) completer.complete(firstOther);
     }));
-    return completer.future.timeout(const Duration(seconds: 6), onTimeout: () => firstOther);
+    final r = await completer.future.timeout(const Duration(seconds: 6), onTimeout: () => firstOther);
+    if (r == null && !_wasOnline) note('Aucune adresse ne répond : ${i.hosts.map(_short).join(', ')}');
+    return r;
   }
 
   static String _short(String? h) {
@@ -377,8 +400,16 @@ class PcLink extends ChangeNotifier {
       if (r.statusCode != 200) return false;
       final p = Rendezvous.latest(i.token, r.body);
       final url = '${p?['url'] ?? ''}';
-      if (!PcConnectionInfo.isTunnel(url)) return false;
+      if (p == null) {
+        note('Rendez-vous : aucune annonce du PC avec ce code');
+        return false;
+      }
+      if (!PcConnectionInfo.isTunnel(url)) {
+        note('Rendez-vous : le PC n\'annonce pas d\'adresse Internet');
+        return false;
+      }
       if (i.host == url) return false;
+      note('Rendez-vous : nouvelle adresse Internet ${_short(url)}');
       // Les anciennes adresses de tunnel ne reviendront pas : on les remplace.
       final kept = i.hosts.where((h) => !PcConnectionInfo.isTunnel(h)).toList();
       final fresh = PcConnectionInfo(host: url, port: i.port, token: i.token, hosts: kept);
@@ -387,7 +418,8 @@ class PcLink extends ChangeNotifier {
       await Prefs.save(fresh);
       notifyListeners();
       return true;
-    } catch (_) {
+    } catch (e) {
+      note('Rendez-vous injoignable : ${e.runtimeType}');
       return false;
     }
   }
@@ -401,6 +433,7 @@ class PcLink extends ChangeNotifier {
     final tunnels = s.addresses.where(PcConnectionInfo.isTunnel).toSet();
     final stale = tunnels.isEmpty ? const <String>[] : i.hosts.where((h) => PcConnectionInfo.isTunnel(h) && !tunnels.contains(h) && h != i.host).toList();
     if (fresh.isEmpty && stale.isEmpty) return;
+    if (fresh.isNotEmpty) note('Adresses apprises du PC : ${fresh.map(_short).join(', ')}');
     info = PcConnectionInfo(host: i.host, port: i.port, token: i.token, hosts: [...i.hosts.where((h) => !stale.contains(h)), ...fresh]);
     unawaited(Prefs.save(info!));
     notifyListeners();

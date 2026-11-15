@@ -67,6 +67,7 @@ class _SettingsViewState extends State<SettingsView> {
   List<String> _addresses = const [];
   bool _remoteCopied = false;
   bool _showQr = false;
+  bool _logCopied = false;
   String? _firewallMsg;
 
   @override
@@ -424,6 +425,36 @@ class _SettingsViewState extends State<SettingsView> {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 6),
+                // Le journal de connexion : à copier-coller quand ça ne marche pas.
+                Row(
+                  children: [
+                    Text('JOURNAL DE CONNEXION', style: ui(9.5, weight: FontWeight.w700, color: Palette.dim4)),
+                    const Spacer(),
+                    IslandButton(
+                      label: _logCopied ? 'Copié' : 'Copier le journal',
+                      compact: true,
+                      onTap: () async {
+                        await Clipboard.setData(ClipboardData(text: widget.remote.log.join('\n')));
+                        setState(() => _logCopied = true);
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Container(
+                  width: double.infinity,
+                  constraints: const BoxConstraints(maxHeight: 96),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  decoration: BoxDecoration(color: Palette.card, borderRadius: BorderRadius.circular(8), border: Border.all(color: Palette.hairline)),
+                  child: SingleChildScrollView(
+                    reverse: true,
+                    child: Text(
+                      widget.remote.log.isEmpty ? '(rien pour l\'instant)' : widget.remote.log.skip(widget.remote.log.length > 40 ? widget.remote.log.length - 40 : 0).join('\n'),
+                      style: mono(10.5, color: Palette.dim),
+                    ),
+                  ),
                 ),
               ],
             ],

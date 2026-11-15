@@ -7,7 +7,7 @@ build/
 pubspec.lock
 analysis_options.yaml
 README.md
-test/
+test/widget_test.dart
 android/*
 !android/app/
 android/app/*

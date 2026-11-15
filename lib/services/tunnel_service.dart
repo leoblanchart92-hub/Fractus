@@ -40,6 +40,9 @@ class TunnelService extends ChangeNotifier {
 
   bool get online => status == TunnelStatus.online && url != null;
 
+  /// Pour le journal de connexion du serveur téléphone.
+  void Function(String message)? onLog;
+
   /// Le binaire : à côté des réglages (%APPDATA%\fractus\cloudflared.exe).
   static Future<File> binary() async {
     final d = await Settings.dir();
@@ -86,6 +89,7 @@ class TunnelService extends ChangeNotifier {
     if (await f.exists() && await f.length() > 10 * 1024 * 1024) return;
     status = TunnelStatus.downloading;
     progress = 0;
+    onLog?.call('Téléchargement de cloudflared…');
     notifyListeners();
     final part = File('${f.path}.part');
     final req = http.Request('GET', Uri.parse(downloadUrl))..headers['User-Agent'] = 'Fractus (Windows)';
@@ -127,6 +131,7 @@ class TunnelService extends ChangeNotifier {
       if (gen != _generation) return;
       error = 'Impossible de récupérer cloudflared : $e';
       status = TunnelStatus.error;
+      onLog?.call(error!);
       notifyListeners();
       return;
     }
@@ -151,6 +156,7 @@ class TunnelService extends ChangeNotifier {
           status = TunnelStatus.online;
           error = null;
           _backoff = 2;
+          onLog?.call('Tunnel Internet ouvert : $url');
           notifyListeners();
         }
 
@@ -167,6 +173,7 @@ class TunnelService extends ChangeNotifier {
       _proc = null;
       url = null;
       status = TunnelStatus.error;
+      onLog?.call(error ?? 'Tunnel arrêté');
       notifyListeners();
       await Future<void>.delayed(Duration(seconds: _backoff));
       _backoff = min(_backoff * 2, 60);
