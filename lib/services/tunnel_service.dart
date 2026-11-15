@@ -139,7 +139,7 @@ class TunnelService extends ChangeNotifier {
       try {
         final p = await Process.start(
           exe,
-          ['tunnel', '--url', 'http://127.0.0.1:$_port', '--no-autoupdate', '--protocol', 'http2', '--loglevel', 'info'],
+          ['tunnel', '--url', 'http://127.0.0.1:$_port', '--no-autoupdate', '--loglevel', 'info'],
           runInShell: false,
         );
         _proc = p;

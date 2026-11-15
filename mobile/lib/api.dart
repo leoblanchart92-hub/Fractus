@@ -275,7 +275,8 @@ class PcLink extends ChangeNotifier {
     // La première qui répond : le Wi-Fi est plus rapide, Internet marche de partout.
     final alive = await probeAll(base);
     if (alive.isEmpty) {
-      return 'PC trouvé (${p['host'] ?? ''}) mais injoignable pour l\'instant : il est allumé ? Fractus tourne ? Réessaie dans quelques secondes.';
+      return 'PC « ${p['host'] ?? ''} » trouvé, mais aucune de ses adresses ne répond (${candidates.map(_short).join(', ')}). '
+          'Il est allumé ? Fractus ouvert ? Regarde la ligne sous le code sur le PC.';
     }
     final lan = alive.where((h) => !PcConnectionInfo.isTunnel(h));
     onFound(base.withHost(lan.isNotEmpty ? lan.first : alive.first));

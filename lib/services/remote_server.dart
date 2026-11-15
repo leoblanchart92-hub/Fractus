@@ -102,7 +102,11 @@ class RemoteServer {
     _addressTimer = null;
     _publishDebounce?.cancel();
     _publishPeriodic?.cancel();
+    _verifyTimer?.cancel();
     _requestedFor = '';
+    rendezvousOk = null;
+    tunnelOk = null;
+    verifyDetail = null;
     _push?.cancel();
     for (final s in _streams.toList()) {
       try {
@@ -149,6 +153,15 @@ class RemoteServer {
   Timer? _publishPeriodic;
   String? rendezvousError;
 
+  /// Le résultat des vérifications faites depuis le PC lui-même (voir [verify]).
+  bool? rendezvousOk;
+  bool? tunnelOk;
+  String? verifyDetail;
+  DateTime? verifiedAt;
+  String _lastPublishedAt = '';
+  Timer? _verifyTimer;
+  int _tunnelFailures = 0;
+
   String _requestedFor = '';
 
   void _publishSoon() {
@@ -161,12 +174,13 @@ class RemoteServer {
     final token = state.settings.remoteToken;
     if (!running || token.isEmpty || addresses.isEmpty) return;
     final t = tunnel;
+    final at = DateTime.now().toUtc().toIso8601String();
     final payload = <String, Object?>{
       'host': Platform.localHostname,
       'port': port,
       'addresses': addresses,
       if (t != null && t.online) 'url': t.url,
-      'at': DateTime.now().toUtc().toIso8601String(),
+      'at': at,
     };
     try {
       final r = await http
@@ -178,14 +192,64 @@ class RemoteServer {
           .timeout(const Duration(seconds: 15));
       if (r.statusCode >= 300) throw HttpException('HTTP ${r.statusCode}');
       rendezvousError = null;
+      _lastPublishedAt = at;
       _publishPeriodic?.cancel();
       _publishPeriodic = Timer.periodic(const Duration(hours: 4), (_) => publishRendezvous());
+      // On vérifie, comme le ferait le téléphone, que tout est vraiment joignable.
+      _verifyTimer?.cancel();
+      _verifyTimer = Timer(const Duration(seconds: 8), () => verify());
     } catch (e) {
       rendezvousError = '$e';
       // Pas d'Internet pour l'instant ? On réessaiera dans deux minutes.
       _publishDebounce?.cancel();
       _publishDebounce = Timer(const Duration(minutes: 2), () => publishRendezvous());
     }
+  }
+
+  /// Se met à la place du téléphone : relit l'annonce au point de rendez-vous et
+  /// frappe à sa propre porte par le tunnel Internet. Résultats dans [rendezvousOk],
+  /// [tunnelOk], [verifyDetail] ; l'île se met à jour.
+  Future<void> verify() async {
+    if (!running) return;
+    final token = state.settings.remoteToken;
+    final details = <String>[];
+    // 1. L'annonce est-elle lisible avec le code ?
+    try {
+      final r = await http.get(Rendezvous.pollUri(token)).timeout(const Duration(seconds: 12));
+      final p = r.statusCode == 200 ? Rendezvous.latest(token, r.body) : null;
+      rendezvousOk = p != null && (_lastPublishedAt.isEmpty || '${p['at']}' == _lastPublishedAt);
+      if (rendezvousOk != true) details.add(p == null ? 'annonce introuvable sur ntfy.sh (HTTP ${r.statusCode})' : 'annonce périmée sur ntfy.sh');
+    } catch (e) {
+      rendezvousOk = false;
+      details.add('ntfy.sh injoignable depuis le PC : $e');
+    }
+    // 2. Le tunnel répond-il vraiment de l'extérieur ?
+    final t = tunnel;
+    if (t != null && t.online && t.url != null) {
+      try {
+        final r = await http.get(Uri.parse('${t.url}/api/ping')).timeout(const Duration(seconds: 15));
+        tunnelOk = r.statusCode == 200 && r.body.contains('fractus');
+        if (tunnelOk != true) details.add('le tunnel répond ${r.statusCode} au lieu de Fractus');
+      } catch (e) {
+        tunnelOk = false;
+        details.add('le tunnel ne répond pas : $e');
+      }
+      if (tunnelOk == true) {
+        _tunnelFailures = 0;
+      } else if (++_tunnelFailures >= 3) {
+        // Trois échecs : on relance le tunnel, il prendra une nouvelle adresse.
+        _tunnelFailures = 0;
+        unawaited(t.restart());
+      }
+    } else {
+      tunnelOk = null;
+    }
+    verifiedAt = DateTime.now();
+    verifyDetail = details.isEmpty ? null : details.join(' · ');
+    state.touch();
+    // On revérifie régulièrement (toutes les 10 min, ou vite si ça ne va pas).
+    _verifyTimer?.cancel();
+    _verifyTimer = Timer(Duration(minutes: (rendezvousOk == true && tunnelOk != false) ? 10 : 1), () => verify());
   }
 
   /// « Nouveau code » : le sujet change, on republie sous le nouveau.

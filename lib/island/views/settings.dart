@@ -527,43 +527,61 @@ class _SettingsViewState extends State<SettingsView> {
 
   /// Une seule ligne, en français : est-ce que le téléphone peut se connecter avec le code ?
   Widget _remoteAccess() {
-    final t = widget.remote.tunnel;
-    final rz = widget.remote.rendezvousError;
+    final r = widget.remote;
+    final t = r.tunnel;
     String line;
     Color color;
     IconData icon;
-    if (!widget.remote.running) {
-      line = widget.remote.error ?? 'Serveur arrêté.';
+    if (!r.running) {
+      line = r.error ?? 'Serveur arrêté.';
       color = Palette.redText;
       icon = Icons.error_outline_rounded;
-    } else if (t != null && t.online && rz == null) {
-      line = 'Prêt : le téléphone peut se connecter avec ce code, à la maison comme en 4G.';
+    } else if (r.rendezvousOk == true && r.tunnelOk == true) {
+      line = 'Prêt : le téléphone peut se connecter avec ce code, à la maison comme en 4G (vérifié ${_ago(r.verifiedAt)}).';
       color = Palette.green2;
       icon = Icons.check_circle_rounded;
+    } else if (r.rendezvousError != null || r.rendezvousOk == false) {
+      line = 'Le PC n\'arrive pas à s\'annoncer sur Internet — le téléphone ne pourra pas le trouver avec le code. '
+          'Internet marche sur ce PC ? Un antivirus/pare-feu bloque ntfy.sh ? (${r.verifyDetail ?? r.rendezvousError})';
+      color = Palette.amber;
+      icon = Icons.cloud_off_rounded;
     } else if (t != null && t.status == TunnelStatus.downloading) {
-      line = 'Préparation de l\'accès à distance (${(t.progress * 100).round()} %)… À la maison, en Wi-Fi, ça marche déjà.';
+      line = 'Préparation de l\'accès à distance (${(t.progress * 100).round()} %)…';
       color = Palette.dim;
       icon = Icons.downloading_rounded;
-    } else if (t != null && t.status == TunnelStatus.starting) {
-      line = 'Préparation de l\'accès à distance… À la maison, en Wi-Fi, ça marche déjà.';
+    } else if (t != null && t.status == TunnelStatus.error) {
+      line = 'Accès à distance indisponible : ${t.error ?? 'erreur'} — nouvel essai automatique.';
+      color = Palette.amber;
+      icon = Icons.cloud_off_rounded;
+    } else if (t != null && t.online && r.tunnelOk == false) {
+      line = 'Le tunnel Internet est ouvert mais ne répond pas de l\'extérieur (le réseau bloque peut-être Cloudflare, port 7844). '
+          'Je le relance automatiquement. (${r.verifyDetail ?? ''})';
+      color = Palette.amber;
+      icon = Icons.cloud_off_rounded;
+    } else if (r.rendezvousOk == true && t != null && t.online) {
+      line = 'Annonce en ligne, vérification du tunnel Internet…';
       color = Palette.dim;
       icon = Icons.sync_rounded;
-    } else if (rz != null) {
-      line = 'Le PC n\'arrive pas à s\'annoncer sur Internet (connexion du PC ?). Nouvel essai automatique. En Wi-Fi, ça marche.';
-      color = Palette.amber;
-      icon = Icons.cloud_off_rounded;
     } else {
-      line = 'Accès à distance indisponible pour l\'instant (nouvel essai automatique). En Wi-Fi, ça marche.';
-      color = Palette.amber;
-      icon = Icons.cloud_off_rounded;
+      line = 'Préparation de l\'accès à distance… (quelques secondes)';
+      color = Palette.dim;
+      icon = Icons.sync_rounded;
     }
     return Row(
       children: [
         Icon(icon, size: 14, color: color),
         const SizedBox(width: 6),
-        Expanded(child: Text(line, maxLines: 2, overflow: TextOverflow.ellipsis, style: ui(11.5, color: color, height: 1.3))),
+        Expanded(child: Text(line, maxLines: 3, overflow: TextOverflow.ellipsis, style: ui(11.5, color: color, height: 1.3))),
+        const SizedBox(width: 6),
+        IslandButton(label: 'Vérifier', compact: true, onTap: () => r.verify()),
       ],
     );
+  }
+
+  static String _ago(DateTime? d) {
+    if (d == null) return 'à l\'instant';
+    final m = DateTime.now().difference(d).inMinutes;
+    return m < 1 ? 'à l\'instant' : 'il y a $m min';
   }
 
   Widget _modelPicker() {
