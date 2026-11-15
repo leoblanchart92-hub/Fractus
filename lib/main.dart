@@ -67,13 +67,13 @@ Future<void> main() async {
   // Le téléphone : serveur sur le réseau local, protégé par le code d'appairage.
   final remote = RemoteServer(state: state, controller: controller, chat: chat, tools: chat.tools, version: () => updates.currentVersion, journal: journal, memory: memory);
   // Le tunnel Internet : le téléphone joint le PC de partout, sans Wi-Fi commun ni VPN.
-  final tunnel = TunnelService(tokenOf: () => state.settings.remoteToken);
+  final tunnel = TunnelService();
   remote.tunnel = tunnel;
   tunnel.addListener(() {
     unawaited(remote.refreshAddresses());
     state.touch();
   });
-  state.addListener(tunnel.onTokenChanged);
+  state.addListener(remote.onTokenChanged);
   Future<void> applyRemote() async {
     if (state.settings.remoteEnabled) {
       if (state.settings.remoteToken.isEmpty) {
@@ -81,7 +81,7 @@ Future<void> main() async {
         await state.settings.save();
       }
       await remote.start(state.settings.remotePort);
-      if (state.settings.remoteTunnel && remote.running) {
+      if (remote.running) {
         await tunnel.start(remote.port ?? state.settings.remotePort);
       } else {
         await tunnel.stop();

@@ -6,10 +6,9 @@
 // https://<aléatoire>.trycloudflare.com menant à notre serveur local. Le code
 // d'appairage reste exigé sur chaque requête, comme en Wi-Fi.
 //
-// L'adresse change à chaque relance : on la dépose (chiffrée avec le code) au
-// point de rendez-vous (voir core/rendezvous.dart) pour que le téléphone la
-// retrouve tout seul, et on la republie régulièrement car ntfy.sh ne garde les
-// messages que 12 h.
+// L'adresse change à chaque relance : le serveur « téléphone » la dépose,
+// chiffrée avec le code, au point de rendez-vous (voir core/rendezvous.dart)
+// pour que le téléphone la retrouve tout seul.
 
 import 'dart:async';
 import 'dart:convert';
@@ -19,16 +18,12 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-import '../core/rendezvous.dart';
 import '../core/settings.dart';
 
 enum TunnelStatus { off, downloading, starting, online, error }
 
 class TunnelService extends ChangeNotifier {
-  TunnelService({required this.tokenOf});
-
-  /// Le code d'appairage du moment (il peut changer : « Nouveau code »).
-  final String Function() tokenOf;
+  TunnelService();
 
   static const String downloadUrl = 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe';
 
@@ -42,8 +37,6 @@ class TunnelService extends ChangeNotifier {
   int _port = 0;
   int _generation = 0;
   int _backoff = 2;
-  Timer? _republish;
-  String _publishedFor = '';
 
   bool get online => status == TunnelStatus.online && url != null;
 
@@ -64,8 +57,6 @@ class TunnelService extends ChangeNotifier {
   Future<void> stop() async {
     _wanted = false;
     _generation++;
-    _republish?.cancel();
-    _republish = null;
     await _kill();
     url = null;
     error = null;
@@ -156,9 +147,6 @@ class TunnelService extends ChangeNotifier {
           error = null;
           _backoff = 2;
           notifyListeners();
-          unawaited(publish());
-          _republish?.cancel();
-          _republish = Timer.periodic(const Duration(hours: 4), (_) => publish());
         }
 
         final outDone = p.stdout.transform(utf8.decoder).transform(const LineSplitter()).forEach(scan);
@@ -173,8 +161,6 @@ class TunnelService extends ChangeNotifier {
       }
       _proc = null;
       url = null;
-      _republish?.cancel();
-      _republish = null;
       status = TunnelStatus.error;
       notifyListeners();
       await Future<void>.delayed(Duration(seconds: _backoff));
@@ -182,33 +168,10 @@ class TunnelService extends ChangeNotifier {
     }
   }
 
-  /// Dépose l'adresse du tunnel au point de rendez-vous (chiffrée avec le code).
-  Future<void> publish() async {
-    final u = url;
-    final token = tokenOf();
-    if (u == null || token.isEmpty) return;
-    try {
-      final body = Rendezvous.seal(token, {'url': u, 'port': _port, 'at': DateTime.now().toUtc().toIso8601String()});
-      await http
-          .post(Rendezvous.publishUri(token), headers: const {'Firebase': 'no', 'Cache': 'yes', 'Content-Type': 'text/plain'}, body: body)
-          .timeout(const Duration(seconds: 15));
-      _publishedFor = Rendezvous.normalize(token);
-    } catch (_) {
-      // Pas grave : le téléphone garde la dernière adresse connue ; on réessaiera.
-      Timer(const Duration(minutes: 2), publish);
-    }
-  }
-
-  /// Le code a changé (« Nouveau code ») : le sujet aussi, on republie.
-  void onTokenChanged() {
-    if (online && Rendezvous.normalize(tokenOf()) != _publishedFor) unawaited(publish());
-  }
-
   @override
   void dispose() {
     _wanted = false;
     _generation++;
-    _republish?.cancel();
     unawaited(_kill());
     super.dispose();
   }

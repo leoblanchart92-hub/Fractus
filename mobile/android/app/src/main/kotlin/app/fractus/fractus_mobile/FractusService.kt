@@ -44,7 +44,7 @@ object PcPrefs {
         } catch (_: ClassCastException) {
             p.getInt("flutter.port", 7790)
         }
-        // Toutes les adresses connues (Wi-Fi, Tailscale…), la courante d'abord.
+        // Toutes les adresses connues (Wi-Fi, Internet), la courante d'abord.
         val hosts = ArrayList<String>()
         hosts.add(host)
         for (h in (p.getString("flutter.hosts", "") ?: "").split(",")) {
@@ -175,7 +175,7 @@ class FractusService : Service() {
             }
             var conn: HttpURLConnection? = null
             try {
-                // On essaie chaque adresse connue (Wi-Fi puis Tailscale, ou l'inverse) : la première qui répond.
+                // On essaie chaque adresse connue (Wi-Fi puis Internet, ou l'inverse) : la première qui répond.
                 var opened: HttpURLConnection? = null
                 var firstError: Exception? = null
                 for (h in c.hosts) {

@@ -1,5 +1,5 @@
-// Le serveur « téléphone » : l'appli Android de Fractus s'y connecte sur le
-// réseau local (ou via Tailscale) pour voir l'état, autoriser les demandes,
+// Le serveur « téléphone » : l'appli Android de Fractus s'y connecte (en Wi-Fi
+// ou, de l'extérieur, par le tunnel Internet) pour voir l'état, autoriser les demandes,
 // discuter avec Fractus, voir l'écran et déclencher des actions rapides.
 //
 //   Toutes les routes sauf /api/ping exigent le code d'appairage :
@@ -23,8 +23,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:http/http.dart' as http;
+
 import '../core/layout.dart';
 import '../core/models.dart';
+import '../core/rendezvous.dart';
 import '../core/settings.dart';
 import '../core/state.dart';
 import '../island/controller.dart';
@@ -97,6 +100,9 @@ class RemoteServer {
     _heartbeat?.cancel();
     _addressTimer?.cancel();
     _addressTimer = null;
+    _publishDebounce?.cancel();
+    _publishPeriodic?.cancel();
+    _requestedFor = '';
     _push?.cancel();
     for (final s in _streams.toList()) {
       try {
@@ -115,16 +121,8 @@ class RemoteServer {
     stop();
   }
 
-  /// Une adresse du réseau Tailscale (100.64.0.0/10) : joignable de partout.
-  static bool isTailscale(String a) {
-    final m = RegExp(r'^100\.(\d+)\.').firstMatch(a);
-    if (m == null) return false;
-    final second = int.tryParse(m.group(1)!) ?? 0;
-    return second >= 64 && second <= 127;
-  }
-
   /// Les adresses connues du PC, rafraîchies régulièrement (envoyées au téléphone
-  /// pour qu'il sache où nous joindre : Wi-Fi à la maison, Tailscale ailleurs).
+  /// pour qu'il sache où nous joindre : Wi-Fi à la maison, tunnel Internet ailleurs).
   List<String> addresses = const [];
   Timer? _addressTimer;
 
@@ -137,7 +135,63 @@ class RemoteServer {
     if (a.join(',') != addresses.join(',')) {
       addresses = a;
       _onState();
+      _publishSoon();
     }
+  }
+
+  // ── Le point de rendez-vous ───────────────────────────────────────────────
+  //
+  // Le téléphone n'a besoin que du code : le PC dépose ses adresses (Wi-Fi et
+  // tunnel Internet), chiffrées avec ce code, sur ntfy.sh. Republié toutes les
+  // 4 h (le serveur ne garde les messages que 12 h) et à chaque changement.
+
+  Timer? _publishDebounce;
+  Timer? _publishPeriodic;
+  String? rendezvousError;
+
+  String _requestedFor = '';
+
+  void _publishSoon() {
+    _requestedFor = Rendezvous.normalize(state.settings.remoteToken);
+    _publishDebounce?.cancel();
+    _publishDebounce = Timer(const Duration(seconds: 2), () => publishRendezvous());
+  }
+
+  Future<void> publishRendezvous() async {
+    final token = state.settings.remoteToken;
+    if (!running || token.isEmpty || addresses.isEmpty) return;
+    final t = tunnel;
+    final payload = <String, Object?>{
+      'host': Platform.localHostname,
+      'port': port,
+      'addresses': addresses,
+      if (t != null && t.online) 'url': t.url,
+      'at': DateTime.now().toUtc().toIso8601String(),
+    };
+    try {
+      final r = await http
+          .post(
+            Rendezvous.publishUri(token),
+            headers: const {'Firebase': 'no', 'Cache': 'yes', 'Content-Type': 'text/plain'},
+            body: Rendezvous.seal(token, payload),
+          )
+          .timeout(const Duration(seconds: 15));
+      if (r.statusCode >= 300) throw HttpException('HTTP ${r.statusCode}');
+      rendezvousError = null;
+      _publishPeriodic?.cancel();
+      _publishPeriodic = Timer.periodic(const Duration(hours: 4), (_) => publishRendezvous());
+    } catch (e) {
+      rendezvousError = '$e';
+      // Pas d'Internet pour l'instant ? On réessaiera dans deux minutes.
+      _publishDebounce?.cancel();
+      _publishDebounce = Timer(const Duration(minutes: 2), () => publishRendezvous());
+    }
+  }
+
+  /// « Nouveau code » : le sujet change, on republie sous le nouveau.
+  void onTokenChanged() {
+    final t = Rendezvous.normalize(state.settings.remoteToken);
+    if (running && t.isNotEmpty && t != _requestedFor) _publishSoon();
   }
 
   /// Les adresses IPv4 locales (pour afficher « 192.168.1.20:7790 »).

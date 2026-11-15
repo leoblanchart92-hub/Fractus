@@ -155,7 +155,7 @@ class PcLink extends ChangeNotifier {
     _generation++;
   }
 
-  /// Par où on passe en ce moment : « Wi-Fi », « Tailscale »… (vide hors ligne).
+  /// Par où on passe en ce moment : « Wi-Fi » ou « Internet » (vide hors ligne).
   String get network => online && info != null ? PcConnectionInfo.networkLabel(info!.host) : '';
 
   Future<void> _loop(int gen) async {
@@ -168,7 +168,7 @@ class PcLink extends ChangeNotifier {
       }
       try {
         // Plusieurs adresses connues : la première qui répond gagne (Wi-Fi chez
-        // soi, Tailscale ailleurs). On ne change d'adresse que si la nôtre se tait.
+        // soi, Internet ailleurs). On ne change d'adresse que si la nôtre se tait.
         if (i.hosts.length > 1) {
           final h = await _firstAlive(i);
           if (gen != _generation) return;
@@ -245,6 +245,57 @@ class PcLink extends ChangeNotifier {
   }
 
   DateTime _lastRendezvous = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Appairage par le code seul : le PC a déposé ses adresses au point de
+  /// rendez-vous ; on les essaie toutes et on garde celles qui existent.
+  /// Renvoie un message d'erreur lisible, ou `null` si c'est connecté.
+  static Future<String?> findByCode(String code, void Function(PcConnectionInfo info) onFound) async {
+    final token = Rendezvous.normalize(code);
+    if (token.length < 6) return 'Le code fait 8 caractères (ex. AB2C-D3EF).';
+    String body;
+    try {
+      final r = await http.get(Rendezvous.pollUri(token)).timeout(const Duration(seconds: 12));
+      if (r.statusCode != 200) return 'Point de rendez-vous indisponible (${r.statusCode}). Réessaie dans un instant.';
+      body = r.body;
+    } catch (_) {
+      return 'Pas d\'accès à Internet sur le téléphone ?';
+    }
+    final p = Rendezvous.latest(token, body);
+    if (p == null) {
+      return 'Aucun PC ne s\'annonce avec ce code. Sur le PC : Fractus ouvert, Réglages → Téléphone activé, et vérifie le code.';
+    }
+    final port = (p['port'] is int) ? p['port'] as int : 7790;
+    final candidates = <String>[
+      for (final a in (p['addresses'] is List ? p['addresses'] as List : const [])) '$a',
+      if (PcConnectionInfo.isTunnel('${p['url'] ?? ''}')) '${p['url']}',
+    ].where((h) => h.isNotEmpty).toSet().toList();
+    if (candidates.isEmpty) return 'Le PC ne donne aucune adresse.';
+    final pretty = token.length == 8 ? '${token.substring(0, 4)}-${token.substring(4)}' : token;
+    final base = PcConnectionInfo(host: candidates.first, port: port, token: pretty, hosts: candidates);
+    // La première qui répond : le Wi-Fi est plus rapide, Internet marche de partout.
+    final alive = await probeAll(base);
+    if (alive.isEmpty) {
+      return 'PC trouvé (${p['host'] ?? ''}) mais injoignable pour l\'instant : il est allumé ? Fractus tourne ? Réessaie dans quelques secondes.';
+    }
+    final lan = alive.where((h) => !PcConnectionInfo.isTunnel(h));
+    onFound(base.withHost(lan.isNotEmpty ? lan.first : alive.first));
+    return null;
+  }
+
+  /// Les adresses de `i.hosts` qui répondent (avec le code), en parallèle.
+  static Future<List<String>> probeAll(PcConnectionInfo i) async {
+    final ok = <String>[];
+    await Future.wait([
+      for (final h in i.hosts)
+        () async {
+          try {
+            await PcClient(i.withHost(h)).status().timeout(const Duration(seconds: 7));
+            ok.add(h);
+          } catch (_) {}
+        }(),
+    ]);
+    return ok;
+  }
 
   /// Le PC est introuvable : peut-être que son tunnel Internet a changé
   /// d'adresse. On demande au point de rendez-vous (chiffré avec le code).

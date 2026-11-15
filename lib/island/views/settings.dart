@@ -100,8 +100,6 @@ class _SettingsViewState extends State<SettingsView> {
       await script.writeAsString([
         'netsh advfirewall firewall delete rule name="Fractus (telephone)" | Out-Null',
         'netsh advfirewall firewall add rule name="Fractus (telephone)" dir=in action=allow protocol=TCP localport=$port profile=private,domain | Out-Null',
-        'netsh advfirewall firewall delete rule name="Fractus (telephone Tailscale)" | Out-Null',
-        'netsh advfirewall firewall add rule name="Fractus (telephone Tailscale)" dir=in action=allow protocol=TCP localport=$port remoteip=100.64.0.0/10 profile=any | Out-Null',
         'exit \$LASTEXITCODE',
       ].join('\r\n'));
       final args = "'-NoProfile','-ExecutionPolicy','Bypass','-File','${script.path}'";
@@ -110,7 +108,7 @@ class _SettingsViewState extends State<SettingsView> {
         '-Command',
         '\$p = Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidden -PassThru -ArgumentList $args; exit \$p.ExitCode',
       ]);
-      setState(() => _firewallMsg = r.exitCode == 0 ? 'Pare-feu ouvert sur le port $port (réseaux privés + Tailscale).' : 'Refusé ou échec (code ${r.exitCode}).');
+      setState(() => _firewallMsg = r.exitCode == 0 ? 'Pare-feu ouvert sur le port $port (réseaux privés).' : 'Refusé ou échec (code ${r.exitCode}).');
     } catch (e) {
       setState(() => _firewallMsg = 'Échec : $e');
     }
@@ -324,24 +322,35 @@ class _SettingsViewState extends State<SettingsView> {
               });
             }),
             if (s.remoteEnabled) ...[
+              // Le code, en gros : c'est tout ce qu'il faut taper sur le téléphone.
               Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Palette.card,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Palette.hairline),
+                    ),
+                    child: Text(s.remoteToken, style: ui(16, weight: FontWeight.w700, color: Palette.ink).copyWith(letterSpacing: 1.5)),
+                  ),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       widget.remote.running
-                          ? 'Adresse : ${_addresses.isEmpty ? '(pas de réseau)' : _addresses.first}:${widget.remote.port}   ·   Code : ${s.remoteToken}'
+                          ? 'Sur le téléphone : ouvre Fractus, tape ce code, « Se connecter ». Ça marche en Wi-Fi comme en 4G, de partout.'
                           : (widget.remote.error ?? 'Serveur arrêté'),
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: ui(12, color: widget.remote.running ? Palette.ink : Palette.redText),
+                      style: ui(11.5, color: widget.remote.running ? Palette.dim : Palette.redText, height: 1.3),
                     ),
                   ),
                   IslandButton(
                     label: _remoteCopied ? 'Copié' : 'Copier',
                     compact: true,
                     onTap: () async {
-                      final addr = _addresses.isEmpty ? '' : _addresses.first;
-                      await Clipboard.setData(ClipboardData(text: '$addr:${widget.remote.port ?? s.remotePort} ${s.remoteToken}'));
+                      await Clipboard.setData(ClipboardData(text: s.remoteToken));
                       setState(() => _remoteCopied = true);
                     },
                   ),
@@ -352,11 +361,10 @@ class _SettingsViewState extends State<SettingsView> {
                     onTap: () {
                       s.remoteToken = Settings.newRemoteToken();
                       widget.state.saveSettingsSoon();
+                      widget.state.touch();
                       setState(() => _remoteCopied = false);
                     },
                   ),
-                  const SizedBox(width: 6),
-                  IslandButton(label: 'Pare-feu', compact: true, onTap: _openFirewall),
                   const SizedBox(width: 6),
                   IslandButton(label: 'QR code', compact: true, primary: _showQr, onTap: () => setState(() => _showQr = !_showQr)),
                 ],
@@ -387,18 +395,28 @@ class _SettingsViewState extends State<SettingsView> {
                   ],
                 ),
               ],
-              const SizedBox(height: 3),
-              Text(
-                _firewallMsg ??
-                    'Dans l\'appli Fractus sur le téléphone : entre cette adresse et ce code (même Wi-Fi que le PC), ou scanne le QR code. '
-                        'Si ça ne se connecte pas : « Pare-feu » (une fois, avec les droits administrateur).'
-                        '${_addresses.length > 1 ? ' Autres adresses : ${_addresses.skip(1).join(', ')}.' : ''}',
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: ui(11, color: Palette.dim3),
-              ),
               const SizedBox(height: 6),
               _remoteAccess(),
+              const SizedBox(height: 6),
+              // Les détails, pour qui veut : adresses et pare-feu.
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _firewallMsg ??
+                          'Wi-Fi : ${_addresses.isEmpty ? '(pas de réseau)' : '${_addresses.first}:${widget.remote.port ?? s.remotePort}'}'
+                              '${_addresses.length > 1 ? ' (aussi ${_addresses.skip(1).join(', ')})' : ''}. '
+                              'Si le téléphone ne passe pas par le Wi-Fi : « Pare-feu » (une fois, droits administrateur) ; '
+                              'sinon il passe par Internet, ce qui marche aussi à la maison.',
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: ui(11, color: Palette.dim3, height: 1.3),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  IslandButton(label: 'Pare-feu', compact: true, onTap: _openFirewall),
+                ],
+              ),
             ],
             _section('Mises à jour'),
             _toggle('Chercher les mises à jour automatiquement', s.autoUpdate, (v) {
@@ -492,43 +510,35 @@ class _SettingsViewState extends State<SettingsView> {
     }
   }
 
-  /// Toutes les adresses à donner au téléphone : Wi-Fi/Tailscale, puis le tunnel Internet.
+  /// Toutes les adresses à donner au téléphone : Wi-Fi, puis le tunnel Internet.
   List<String> get _allAddresses {
     final t = widget.remote.tunnel;
     return [..._addresses, if (t != null && t.online) t.url!];
   }
 
-  /// Hors de chez soi, sans VPN : le tunnel Internet (cloudflared, gratuit, sans compte).
+  /// Hors de chez soi : le tunnel Internet (cloudflared, gratuit, sans compte), lancé avec le serveur.
   Widget _remoteAccess() {
-    final s = widget.state.settings;
     final t = widget.remote.tunnel;
-    final ts = _addresses.where(RemoteServer.isTailscale).toList();
     String line;
     Color color = Palette.dim3;
     switch (t?.status ?? TunnelStatus.off) {
       case TunnelStatus.off:
-        line = 'Le téléphone pourra joindre le PC de partout (4G, autre Wi-Fi), sans VPN ni réglage de box : Fractus ouvre un tunnel chiffré via Cloudflare. Le code d\'appairage reste exigé.';
+        line = 'Accès depuis Internet : arrêté.';
       case TunnelStatus.downloading:
-        line = 'Téléchargement de cloudflared (une seule fois)… ${(t!.progress * 100).round()} %';
+        line = 'Accès depuis Internet : téléchargement de cloudflared (une seule fois)… ${(t!.progress * 100).round()} %';
       case TunnelStatus.starting:
-        line = 'Ouverture du tunnel…';
+        line = 'Accès depuis Internet : ouverture du tunnel…';
       case TunnelStatus.online:
-        line = 'Tunnel en ligne : ${t!.url}  — le téléphone le retrouve tout seul, même après un redémarrage du PC.';
+        line = 'Accès depuis Internet : en ligne (${t!.url}). Le téléphone retrouve cette adresse tout seul avec le code, même après un redémarrage.';
         color = Palette.green2;
       case TunnelStatus.error:
-        line = t!.error ?? 'Tunnel en erreur.';
+        line = 'Accès depuis Internet : ${t!.error ?? 'erreur'}';
         color = Palette.redText;
     }
+    final rz = widget.remote.rendezvousError;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _toggle('Accessible depuis Internet (sans être sur le même Wi-Fi)', s.remoteTunnel, (v) {
-          s.remoteTunnel = v;
-          widget.state.saveSettingsSoon();
-          widget.onRemoteChanged().then((_) {
-            if (mounted) setState(() {});
-          });
-        }),
         Row(
           children: [
             Icon(
@@ -537,24 +547,16 @@ class _SettingsViewState extends State<SettingsView> {
               color: t != null && t.online ? Palette.green2 : Palette.dim3,
             ),
             const SizedBox(width: 6),
-            Expanded(child: Text(line, maxLines: 3, overflow: TextOverflow.ellipsis, style: ui(11, color: color, height: 1.3))),
-            if (t != null && t.status == TunnelStatus.online) ...[
-              const SizedBox(width: 6),
-              IslandButton(
-                label: 'Copier',
-                compact: true,
-                onTap: () => Clipboard.setData(ClipboardData(text: '${t.url} ${s.remoteToken}')),
-              ),
-            ],
-            if (t != null && t.status == TunnelStatus.error) ...[
+            Expanded(child: Text(line, maxLines: 2, overflow: TextOverflow.ellipsis, style: ui(11, color: color, height: 1.3))),
+            if (t != null && (t.status == TunnelStatus.error || t.status == TunnelStatus.online)) ...[
               const SizedBox(width: 6),
               IslandButton(label: 'Relancer', compact: true, onTap: t.restart),
             ],
           ],
         ),
-        if (ts.isNotEmpty) ...[
+        if (rz != null) ...[
           const SizedBox(height: 3),
-          Text('Tailscale détecté (${ts.first}) : le téléphone peut aussi passer par là.', style: ui(11, color: Palette.dim3)),
+          Text('Point de rendez-vous injoignable (le téléphone ne trouvera le PC qu\'en Wi-Fi) : $rz', maxLines: 2, overflow: TextOverflow.ellipsis, style: ui(11, color: Palette.amber)),
         ],
       ],
     );

@@ -919,6 +919,7 @@ class _PhoneSettingsState extends State<PhoneSettings> {
   String? _message;
   bool _testing = false;
   bool _notify = false;
+  bool _manual = false;
 
   @override
   void initState() {
@@ -950,9 +951,39 @@ class _PhoneSettingsState extends State<PhoneSettings> {
       setState(() => _message = 'QR code illisible');
       return;
     }
-    _address.text = '${info.host}:${info.port}';
     _code.text = info.token;
-    await _connect();
+    await _connectInfo(info);
+  }
+
+  /// Avec toutes les adresses connues (QR code) : la première qui répond, Wi-Fi d'abord.
+  Future<void> _connectInfo(PcConnectionInfo info) async {
+    setState(() {
+      _testing = true;
+      _message = 'Connexion…';
+    });
+    final alive = await PcLink.probeAll(info);
+    if (!mounted) return;
+    if (alive.isEmpty) {
+      setState(() {
+        _testing = false;
+        _message = 'PC injoignable. Il est allumé, Fractus ouvert ? Sinon essaie « Par le code ».';
+      });
+      return;
+    }
+    final lan = alive.where((h) => !PcConnectionInfo.isTunnel(h));
+    await _adopt(info.withHost(lan.isNotEmpty ? lan.first : alive.first));
+  }
+
+  Future<void> _adopt(PcConnectionInfo info) async {
+    await widget.link.setInfo(info);
+    if (_notify) await Native.startService();
+    if (!mounted) return;
+    _address.text = PcConnectionInfo.isTunnel(info.host) ? info.host : '${info.host}:${info.port}';
+    setState(() {
+      _testing = false;
+      _message = 'Connecté';
+    });
+    widget.onConnected();
   }
 
   Future<void> _setNotify(bool v) async {
@@ -966,10 +997,36 @@ class _PhoneSettingsState extends State<PhoneSettings> {
     }
   }
 
+  /// Par le code seul : le PC s'annonce au point de rendez-vous, on l'y trouve.
+  Future<void> _connectByCode() async {
+    final code = _code.text.trim();
+    if (code.isEmpty) {
+      setState(() => _message = 'Tape le code affiché sur le PC');
+      return;
+    }
+    setState(() {
+      _testing = true;
+      _message = 'Recherche du PC…';
+    });
+    PcConnectionInfo? found;
+    final err = await PcLink.findByCode(code, (i) => found = i);
+    if (!mounted) return;
+    if (err != null || found == null) {
+      setState(() {
+        _testing = false;
+        _message = err ?? 'PC introuvable';
+      });
+      return;
+    }
+    await _adopt(found!);
+  }
+
   Future<void> _connect() async {
+    if (!_manual) return _connectByCode();
     final address = _address.text.trim();
     final code = _code.text.trim();
-    if (address.isEmpty || code.isEmpty) {
+    if (address.isEmpty) return _connectByCode();
+    if (code.isEmpty) {
       setState(() => _message = 'Adresse et code obligatoires');
       return;
     }
@@ -1001,14 +1058,7 @@ class _PhoneSettingsState extends State<PhoneSettings> {
       });
       return;
     }
-    await widget.link.setInfo(info);
-    if (_notify) await Native.startService();
-    if (!mounted) return;
-    setState(() {
-      _testing = false;
-      _message = 'Connecté';
-    });
-    widget.onConnected();
+    await _adopt(info);
   }
 
   Future<void> _patch(Map<String, Object?> p) async {
@@ -1091,19 +1141,30 @@ class _PhoneSettingsState extends State<PhoneSettings> {
             ],
           ),
           Text(
-            'Sur le PC : Réglages → Téléphone. Recopie l\'adresse et le code affichés.',
+            'Sur le PC : Réglages → Téléphone. Tape le code affiché, c\'est tout : Fractus trouve le PC tout seul, en Wi-Fi comme en 4G.',
             style: ui(11.5, color: Palette.dim3, height: 1.3),
           ),
           const SizedBox(height: 6),
-          _field(_address, hint: 'Adresse du PC (ex. 192.168.1.20:7790)'),
-          const SizedBox(height: 6),
-          _field(_code, hint: 'Code d\'appairage'),
+          _field(_code, hint: 'Code d\'appairage (ex. AB2C-D3EF)'),
+          if (_manual) ...[
+            const SizedBox(height: 6),
+            _field(_address, hint: 'Adresse du PC (ex. 192.168.1.20:7790)'),
+          ],
           const SizedBox(height: 8),
           Row(
             children: [
               IslandButton(label: _testing ? 'Connexion…' : 'Se connecter', primary: true, onTap: _testing ? () {} : _connect),
               const SizedBox(width: 8),
               IslandButton(label: 'Scanner le QR code', onTap: _scan),
+              const Spacer(),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _manual = !_manual),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                  child: Text(_manual ? 'Par le code' : 'Adresse à la main', style: ui(11, color: Palette.dim3)),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 6),
@@ -1122,9 +1183,7 @@ class _PhoneSettingsState extends State<PhoneSettings> {
                 child: Row(
                   children: [
                     Icon(
-                      PcConnectionInfo.isTunnel(h)
-                          ? Icons.language_rounded
-                          : (PcConnectionInfo.isTailscale(h) ? Icons.public_rounded : Icons.wifi_rounded),
+                      PcConnectionInfo.isTunnel(h) ? Icons.language_rounded : Icons.wifi_rounded,
                       size: 12,
                       color: h == widget.link.info!.host && widget.link.online ? Palette.green2 : Palette.dim3,
                     ),
@@ -1139,9 +1198,7 @@ class _PhoneSettingsState extends State<PhoneSettings> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      PcConnectionInfo.isTunnel(h)
-                          ? 'Internet — de partout'
-                          : (PcConnectionInfo.isTailscale(h) ? 'Tailscale — de partout' : 'Wi-Fi — à la maison'),
+                      PcConnectionInfo.isTunnel(h) ? 'Internet — de partout' : 'Wi-Fi — à la maison',
                       style: ui(10.5, color: Palette.dim4),
                     ),
                   ],
@@ -1150,10 +1207,8 @@ class _PhoneSettingsState extends State<PhoneSettings> {
             const SizedBox(height: 4),
             Text(
               widget.link.info!.hosts.any(PcConnectionInfo.isTunnel)
-                  ? 'Hors de chez toi, Fractus passe tout seul par Internet (le tunnel du PC). Si le PC redémarre, il retrouve la nouvelle adresse grâce au code.'
-                  : (widget.link.info!.hosts.any(PcConnectionInfo.isTailscale)
-                      ? 'Hors de chez toi, ouvre Tailscale sur le téléphone : Fractus bascule tout seul sur l\'adresse Tailscale.'
-                      : 'Pour te connecter hors de chez toi : sur le PC, Réglages → Téléphone → « Accessible depuis Internet ». L\'adresse s\'ajoutera ici toute seule (ou rescanne le QR code).'),
+                  ? 'Hors de chez toi, Fractus passe tout seul par Internet. Si le PC redémarre, il retrouve la nouvelle adresse grâce au code.'
+                  : 'Le PC n\'a pas encore annoncé d\'adresse Internet : vérifie sur le PC que la ligne « Accès depuis Internet » est verte, puis reconnecte-toi avec le code.',
               style: ui(11, color: Palette.dim3, height: 1.3),
             ),
           ],

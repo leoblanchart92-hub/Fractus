@@ -69,13 +69,15 @@ lui, s'appelle **Fractus** : un petit cristal aux grands yeux.
 ## Le téléphone (Android)
 
 1. Sur le PC : Fractus → ⚙️ Réglages → **Téléphone** → active « Autoriser le contrôle depuis le téléphone ».
-   L'adresse (`192.168.x.x:7790`) et le code (`XXXX-XXXX`) s'affichent. Si le téléphone ne se connecte pas,
-   clique **Pare-feu** une fois (ouvre le port sur les réseaux privés, demande les droits administrateur).
+   Un code (`XXXX-XXXX`) s'affiche. Fractus ouvre aussi un **tunnel Internet** (cloudflared, Cloudflare, gratuit,
+   sans compte, téléchargé une fois) : la ligne « Accès depuis Internet » passe au vert.
 2. Sur le téléphone : installe `Fractus-Android.apk` (Release GitHub ; autoriser les sources inconnues),
-   l'île s'ouvre sur ses réglages → **Scanner le QR code** (bouton **QR code** dans les réglages du PC),
-   ou entre l'adresse et le code à la main → **Se connecter**.
-3. Depuis l'extérieur : [Tailscale](https://tailscale.com) sur le PC et le téléphone, puis l'adresse Tailscale
-   du PC (`100.x.x.x:7790`). Pas de serveur relais : rien ne transite ailleurs que entre tes deux appareils.
+   l'île s'ouvre sur ses réglages → tape le **code** → **Se connecter**. C'est tout : le PC a déposé ses adresses
+   (Wi-Fi et tunnel), chiffrées avec ce code, sur un point de rendez-vous ([ntfy.sh](https://ntfy.sh), sujet dérivé
+   du code, illisible sans lui) ; le téléphone les y lit et prend la première qui répond. Le QR code marche aussi.
+3. Ça fonctionne en Wi-Fi comme en 4G, sans VPN ni réglage de box. Si le PC redémarre, l'adresse du tunnel
+   change : le téléphone la retrouve tout seul avec le code. Le code d'appairage reste exigé sur chaque requête
+   et les mauvais codes sont ralentis.
 
 Dans les réglages du téléphone, deux options de plus :
 - **Notifications** : un petit service natif garde le flux du PC ouvert même appli fermée (une notification

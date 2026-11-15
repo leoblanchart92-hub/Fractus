@@ -128,7 +128,7 @@ class PcStatus {
         settings = j['settings'] is Map ? PcSettings.fromJson(j['settings'] as Map) : null;
 
   final String version, host, botState;
-  /// Les adresses où le PC est joignable (Wi-Fi, Tailscale…).
+  /// Les adresses où le PC est joignable (Wi-Fi, tunnel Internet).
   final List<String> addresses;
   final bool chatBusy;
   final int queue;

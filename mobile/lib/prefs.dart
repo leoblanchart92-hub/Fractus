@@ -13,11 +13,11 @@ class PcConnectionInfo {
   final int port;
   final String token;
 
-  /// Toutes les adresses connues du PC (Wi-Fi à la maison, Tailscale ailleurs…),
+  /// Toutes les adresses connues du PC (Wi-Fi à la maison, tunnel Internet ailleurs),
   /// `host` en premier : on essaie dans l'ordre jusqu'à ce qu'une réponde.
   final List<String> hosts;
 
-  /// Une adresse peut être une IP du réseau (Wi-Fi, Tailscale) ou l'URL complète
+  /// Une adresse peut être une IP du réseau Wi-Fi ou l'URL complète
   /// du tunnel Internet du PC (https://….trycloudflare.com).
   String get baseUrl => baseUrlOf(host, port);
 
@@ -38,16 +38,8 @@ class PcConnectionInfo {
 
   PcConnectionInfo withHosts(List<String> more) => PcConnectionInfo(host: host, port: port, token: token, hosts: [...hosts, ...more]);
 
-  /// Une adresse du réseau Tailscale (100.64.0.0/10) : joignable de partout.
-  static bool isTailscale(String a) {
-    final m = RegExp(r'^100\.(\d+)\.').firstMatch(a);
-    if (m == null) return false;
-    final second = int.tryParse(m.group(1)!) ?? 0;
-    return second >= 64 && second <= 127;
-  }
-
-  /// « Internet », « Tailscale » ou « Wi-Fi » : par où on passe.
-  static String networkLabel(String a) => isTunnel(a) ? 'Internet' : (isTailscale(a) ? 'Tailscale' : 'Wi-Fi');
+  /// « Internet » ou « Wi-Fi » : par où on passe.
+  static String networkLabel(String a) => isTunnel(a) ? 'Internet' : 'Wi-Fi';
 
   /// Le lien d'appairage du QR code du PC : `fractus://pair?host=…&hosts=a,b&port=…&code=…`.
   static PcConnectionInfo? fromPairLink(String link) {

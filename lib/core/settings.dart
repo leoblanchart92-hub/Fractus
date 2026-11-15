@@ -34,9 +34,6 @@ class Settings {
   /// Contrôle depuis le téléphone (appli Android) : serveur sur le réseau local.
   bool remoteEnabled = false;
   int remotePort = 7790;
-
-  /// Joignable depuis Internet (tunnel Cloudflare lancé par Fractus) : sans Wi-Fi commun ni VPN.
-  bool remoteTunnel = false;
   /// Code d'appairage (Bearer) demandé à chaque requête du téléphone.
   String remoteToken = '';
 
@@ -54,7 +51,6 @@ class Settings {
         'autoUpdate': autoUpdate,
         'remoteEnabled': remoteEnabled,
         'remotePort': remotePort,
-        'remoteTunnel': remoteTunnel,
         'remoteToken': remoteToken,
       };
 
@@ -78,7 +74,6 @@ class Settings {
     s.autoUpdate = j['autoUpdate'] != false;
     s.remoteEnabled = j['remoteEnabled'] == true;
     s.remotePort = (j['remotePort'] is int) ? j['remotePort'] as int : 7790;
-    s.remoteTunnel = j['remoteTunnel'] == true;
     s.remoteToken = (j['remoteToken'] ?? '').toString();
     return s;
   }
