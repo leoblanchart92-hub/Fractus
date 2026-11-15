@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="ic_launcher_background">#FF0A0B0E</color>
     <color name="fx_bg">#F00E1120</color>
     <color name="fx_card">#FF1C2136</color>
     <color name="fx_ink">#FFF5F6F8</color>
