@@ -12,6 +12,7 @@ import '../../core/theme.dart';
 import '../../services/chat_service.dart';
 import '../../services/memory.dart';
 import '../../services/remote_server.dart';
+import '../../services/tunnel_service.dart';
 import '../../services/update_service.dart';
 import '../controller.dart';
 import '../widgets.dart';
@@ -73,6 +74,11 @@ class _SettingsViewState extends State<SettingsView> {
     super.initState();
     _refreshMemory();
     _refreshAddresses();
+    widget.remote.tunnel?.addListener(_onTunnel);
+  }
+
+  void _onTunnel() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _refreshMemory() async {
@@ -110,30 +116,9 @@ class _SettingsViewState extends State<SettingsView> {
     }
   }
 
-  String? _tailscaleMsg;
-
-  /// Installe Tailscale avec winget (UAC), ou ouvre la page de téléchargement.
-  Future<void> _installTailscale() async {
-    setState(() => _tailscaleMsg = 'Installation de Tailscale (winget, droits administrateur)…');
-    try {
-      final r = await Process.run('powershell.exe', [
-        '-NoProfile',
-        '-Command',
-        "\$p = Start-Process winget -Verb RunAs -Wait -PassThru -ArgumentList 'install','--id','Tailscale.Tailscale','-e','--accept-package-agreements','--accept-source-agreements'; exit \$p.ExitCode",
-      ]);
-      if (r.exitCode == 0) {
-        setState(() => _tailscaleMsg = 'Tailscale installé : ouvre-le et connecte-toi (même compte que sur le téléphone).');
-      } else {
-        await Process.run('cmd', ['/c', 'start', '', 'https://tailscale.com/download/windows']);
-        setState(() => _tailscaleMsg = 'winget a échoué (code ${r.exitCode}) : la page de téléchargement est ouverte.');
-      }
-    } catch (e) {
-      setState(() => _tailscaleMsg = 'Échec : $e');
-    }
-  }
-
   @override
   void dispose() {
+    widget.remote.tunnel?.removeListener(_onTunnel);
     _key.dispose();
     _model.dispose();
     _workspace.dispose();
@@ -330,7 +315,7 @@ class _SettingsViewState extends State<SettingsView> {
               ],
             ),
             _section('Téléphone (appli Android)'),
-            _toggle('Autoriser le contrôle depuis le téléphone (réseau local)', s.remoteEnabled, (v) {
+            _toggle('Autoriser le contrôle depuis le téléphone', s.remoteEnabled, (v) {
               s.remoteEnabled = v;
               if (v && s.remoteToken.isEmpty) s.remoteToken = Settings.newRemoteToken();
               widget.state.saveSettingsSoon();
@@ -384,7 +369,7 @@ class _SettingsViewState extends State<SettingsView> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: QrImageView(
-                        data: 'fractus://pair?host=${_addresses.first}&hosts=${_addresses.join(',')}&port=${widget.remote.port ?? s.remotePort}&code=${s.remoteToken}',
+                        data: 'fractus://pair?host=${_addresses.first}&hosts=${Uri.encodeQueryComponent(_allAddresses.join(','))}&port=${widget.remote.port ?? s.remotePort}&code=${s.remoteToken}',
                         size: 120,
                         padding: const EdgeInsets.all(6),
                         backgroundColor: Colors.white,
@@ -405,7 +390,7 @@ class _SettingsViewState extends State<SettingsView> {
               const SizedBox(height: 3),
               Text(
                 _firewallMsg ??
-                    'Dans l\'appli Fractus sur le téléphone : entre cette adresse et ce code. Même Wi-Fi que le PC (ou Tailscale pour l\'extérieur). '
+                    'Dans l\'appli Fractus sur le téléphone : entre cette adresse et ce code (même Wi-Fi que le PC), ou scanne le QR code. '
                         'Si ça ne se connecte pas : « Pare-feu » (une fois, avec les droits administrateur).'
                         '${_addresses.length > 1 ? ' Autres adresses : ${_addresses.skip(1).join(', ')}.' : ''}',
                 maxLines: 3,
@@ -507,35 +492,69 @@ class _SettingsViewState extends State<SettingsView> {
     }
   }
 
-  /// Hors du Wi-Fi : Tailscale (gratuit, chiffré, sans serveur à nous). Détecté par son adresse 100.x.
+  /// Toutes les adresses à donner au téléphone : Wi-Fi/Tailscale, puis le tunnel Internet.
+  List<String> get _allAddresses {
+    final t = widget.remote.tunnel;
+    return [..._addresses, if (t != null && t.online) t.url!];
+  }
+
+  /// Hors de chez soi, sans VPN : le tunnel Internet (cloudflared, gratuit, sans compte).
   Widget _remoteAccess() {
+    final s = widget.state.settings;
+    final t = widget.remote.tunnel;
     final ts = _addresses.where(RemoteServer.isTailscale).toList();
+    String line;
+    Color color = Palette.dim3;
+    switch (t?.status ?? TunnelStatus.off) {
+      case TunnelStatus.off:
+        line = 'Le téléphone pourra joindre le PC de partout (4G, autre Wi-Fi), sans VPN ni réglage de box : Fractus ouvre un tunnel chiffré via Cloudflare. Le code d\'appairage reste exigé.';
+      case TunnelStatus.downloading:
+        line = 'Téléchargement de cloudflared (une seule fois)… ${(t!.progress * 100).round()} %';
+      case TunnelStatus.starting:
+        line = 'Ouverture du tunnel…';
+      case TunnelStatus.online:
+        line = 'Tunnel en ligne : ${t!.url}  — le téléphone le retrouve tout seul, même après un redémarrage du PC.';
+        color = Palette.green2;
+      case TunnelStatus.error:
+        line = t!.error ?? 'Tunnel en erreur.';
+        color = Palette.redText;
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _toggle('Accessible depuis Internet (sans être sur le même Wi-Fi)', s.remoteTunnel, (v) {
+          s.remoteTunnel = v;
+          widget.state.saveSettingsSoon();
+          widget.onRemoteChanged().then((_) {
+            if (mounted) setState(() {});
+          });
+        }),
         Row(
           children: [
-            Icon(ts.isEmpty ? Icons.public_off_rounded : Icons.public_rounded, size: 13, color: ts.isEmpty ? Palette.dim3 : Palette.green2),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                ts.isEmpty
-                    ? 'Hors de chez toi : installe Tailscale sur le PC et le téléphone (même compte). Le téléphone passera tout seul par là.'
-                    : 'Accès à distance actif : Tailscale ${ts.first}. Le téléphone s\'y connecte de partout (Tailscale ouvert sur le téléphone, même compte).',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: ui(11, color: ts.isEmpty ? Palette.dim3 : Palette.dim),
-              ),
+            Icon(
+              t != null && t.online ? Icons.public_rounded : Icons.public_off_rounded,
+              size: 13,
+              color: t != null && t.online ? Palette.green2 : Palette.dim3,
             ),
-            if (ts.isEmpty) ...[
+            const SizedBox(width: 6),
+            Expanded(child: Text(line, maxLines: 3, overflow: TextOverflow.ellipsis, style: ui(11, color: color, height: 1.3))),
+            if (t != null && t.status == TunnelStatus.online) ...[
               const SizedBox(width: 6),
-              IslandButton(label: 'Installer Tailscale', compact: true, onTap: _installTailscale),
+              IslandButton(
+                label: 'Copier',
+                compact: true,
+                onTap: () => Clipboard.setData(ClipboardData(text: '${t.url} ${s.remoteToken}')),
+              ),
+            ],
+            if (t != null && t.status == TunnelStatus.error) ...[
+              const SizedBox(width: 6),
+              IslandButton(label: 'Relancer', compact: true, onTap: t.restart),
             ],
           ],
         ),
-        if (_tailscaleMsg != null) ...[
+        if (ts.isNotEmpty) ...[
           const SizedBox(height: 3),
-          Text(_tailscaleMsg!, maxLines: 2, overflow: TextOverflow.ellipsis, style: ui(11, color: Palette.dim)),
+          Text('Tailscale détecté (${ts.first}) : le téléphone peut aussi passer par là.', style: ui(11, color: Palette.dim3)),
         ],
       ],
     );

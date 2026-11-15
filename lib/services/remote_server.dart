@@ -33,6 +33,7 @@ import 'chat_service.dart';
 import 'chat_tools.dart';
 import 'journal.dart';
 import 'memory.dart';
+import 'tunnel_service.dart';
 
 class RemoteServer {
   RemoteServer({
@@ -53,6 +54,9 @@ class RemoteServer {
   final Journal journal;
   final LongTermMemory memory;
   bool _journalListening = false;
+
+  /// Le tunnel Internet (facultatif) : son adresse s'ajoute à celles qu'on annonce.
+  TunnelService? tunnel;
 
   HttpServer? _server;
   int? port;
@@ -124,8 +128,12 @@ class RemoteServer {
   List<String> addresses = const [];
   Timer? _addressTimer;
 
+  Future<void> refreshAddresses() => _refreshAddresses();
+
   Future<void> _refreshAddresses() async {
     final a = await localAddresses();
+    final t = tunnel?.url;
+    if (t != null && tunnel!.online) a.add(t);
     if (a.join(',') != addresses.join(',')) {
       addresses = a;
       _onState();
@@ -291,7 +299,7 @@ class RemoteServer {
 
   bool _authorized(HttpRequest req) {
     final want = Settings.normalizeToken(state.settings.remoteToken);
-    if (want.isEmpty) return false;
+    if (want.isEmpty || _authFails > 30) return false;
     var given = '';
     final h = req.headers.value('authorization');
     if (h != null && h.toLowerCase().startsWith('bearer ')) given = h.substring(7);
@@ -303,6 +311,19 @@ class RemoteServer {
       diff |= want.codeUnitAt(i) ^ got.codeUnitAt(i);
     }
     return diff == 0;
+  }
+
+  int _authFails = 0;
+  DateTime _authFirstFail = DateTime.fromMillisecondsSinceEpoch(0);
+
+  Future<void> _authFailed() async {
+    final now = DateTime.now();
+    if (now.difference(_authFirstFail) > const Duration(minutes: 10)) {
+      _authFails = 0;
+      _authFirstFail = now;
+    }
+    _authFails++;
+    await Future<void>.delayed(Duration(milliseconds: 250 * (_authFails < 20 ? _authFails : 20)));
   }
 
   Future<Map<String, dynamic>> _body(HttpRequest req) async {
@@ -329,7 +350,12 @@ class RemoteServer {
         return await _json(res, {'app': 'fractus', 'version': version(), 'host': Platform.localHostname, 'addresses': addresses});
       }
       if (!path.startsWith('/api/')) return await _json(res, {'error': 'not found'}, status: 404);
-      if (!_authorized(req)) return await _json(res, {'error': 'code d\'appairage incorrect'}, status: 401);
+      if (!_authorized(req)) {
+        // Derrière le tunnel, n'importe qui peut frapper à la porte : on ralentit les mauvais codes.
+        await _authFailed();
+        return await _json(res, {'error': 'code d\'appairage incorrect'}, status: _authFails > 30 ? 429 : 401);
+      }
+      _authFails = 0;
 
       if (req.method == 'GET' && path == '/api/status') return await _json(res, _status());
 

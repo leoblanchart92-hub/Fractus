@@ -20,6 +20,7 @@ import 'services/memory.dart';
 import 'services/remote_server.dart';
 import 'services/startup_service.dart';
 import 'services/tray_service.dart';
+import 'services/tunnel_service.dart';
 import 'services/update_service.dart';
 import 'services/window_service.dart';
 
@@ -65,6 +66,14 @@ Future<void> main() async {
   final updates = UpdateService(autoCheck: settings.autoUpdate);
   // Le téléphone : serveur sur le réseau local, protégé par le code d'appairage.
   final remote = RemoteServer(state: state, controller: controller, chat: chat, tools: chat.tools, version: () => updates.currentVersion, journal: journal, memory: memory);
+  // Le tunnel Internet : le téléphone joint le PC de partout, sans Wi-Fi commun ni VPN.
+  final tunnel = TunnelService(tokenOf: () => state.settings.remoteToken);
+  remote.tunnel = tunnel;
+  tunnel.addListener(() {
+    unawaited(remote.refreshAddresses());
+    state.touch();
+  });
+  state.addListener(tunnel.onTokenChanged);
   Future<void> applyRemote() async {
     if (state.settings.remoteEnabled) {
       if (state.settings.remoteToken.isEmpty) {
@@ -72,7 +81,13 @@ Future<void> main() async {
         await state.settings.save();
       }
       await remote.start(state.settings.remotePort);
+      if (state.settings.remoteTunnel && remote.running) {
+        await tunnel.start(remote.port ?? state.settings.remotePort);
+      } else {
+        await tunnel.stop();
+      }
     } else {
+      await tunnel.stop();
       await remote.stop();
     }
     state.touch();
@@ -81,6 +96,7 @@ Future<void> main() async {
   Future<void> quit() async {
     await conversations.flush();
     await journal.flush();
+    await tunnel.stop();
     await remote.stop();
     await hooks.stop();
     await tray.stop();
@@ -103,6 +119,7 @@ Future<void> main() async {
   updates.onBeforeInstall = () async {
     await conversations.flush();
     await journal.flush();
+    await tunnel.stop();
     await remote.stop();
     await hooks.stop();
     await tray.stop();

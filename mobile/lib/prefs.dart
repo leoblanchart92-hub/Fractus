@@ -17,7 +17,13 @@ class PcConnectionInfo {
   /// `host` en premier : on essaie dans l'ordre jusqu'à ce qu'une réponde.
   final List<String> hosts;
 
-  String get baseUrl => 'http://$host:$port';
+  /// Une adresse peut être une IP du réseau (Wi-Fi, Tailscale) ou l'URL complète
+  /// du tunnel Internet du PC (https://….trycloudflare.com).
+  String get baseUrl => baseUrlOf(host, port);
+
+  static String baseUrlOf(String h, int port) => isTunnel(h) ? h.replaceAll(RegExp(r'/+$'), '') : 'http://$h:$port';
+
+  static bool isTunnel(String a) => a.startsWith('https://') || a.startsWith('http://');
 
   static List<String> _merge(String first, List<String> others) {
     final out = <String>[];
@@ -40,8 +46,8 @@ class PcConnectionInfo {
     return second >= 64 && second <= 127;
   }
 
-  /// « Tailscale » ou « Wi-Fi » : par où on passe.
-  static String networkLabel(String a) => isTailscale(a) ? 'Tailscale' : 'Wi-Fi';
+  /// « Internet », « Tailscale » ou « Wi-Fi » : par où on passe.
+  static String networkLabel(String a) => isTunnel(a) ? 'Internet' : (isTailscale(a) ? 'Tailscale' : 'Wi-Fi');
 
   /// Le lien d'appairage du QR code du PC : `fractus://pair?host=…&hosts=a,b&port=…&code=…`.
   static PcConnectionInfo? fromPairLink(String link) {
@@ -55,9 +61,14 @@ class PcConnectionInfo {
     return PcConnectionInfo(host: host, port: port, token: code.trim().toUpperCase(), hosts: hosts);
   }
 
-  /// « 192.168.1.20:7790 » ou « 192.168.1.20 » (port par défaut).
+  /// « 192.168.1.20:7790 », « 192.168.1.20 » (port par défaut) ou l'URL du tunnel.
   static PcConnectionInfo parse(String address, String token) {
-    var a = address.trim().replaceFirst(RegExp(r'^https?://'), '').replaceAll(RegExp(r'/.*$'), '');
+    final raw = address.trim();
+    if (raw.startsWith('https://') || raw.contains('trycloudflare.com')) {
+      final u = raw.startsWith('http') ? raw : 'https://$raw';
+      return PcConnectionInfo(host: u.replaceAll(RegExp(r'/+$'), ''), port: 443, token: token.trim().toUpperCase());
+    }
+    var a = raw.replaceFirst(RegExp(r'^https?://'), '').replaceAll(RegExp(r'/.*$'), '');
     var port = 7790;
     final i = a.lastIndexOf(':');
     if (i > 0 && int.tryParse(a.substring(i + 1)) != null) {

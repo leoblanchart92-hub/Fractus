@@ -27,7 +27,8 @@ import java.net.URL
 /** La connexion au PC telle que l'appli Flutter l'a enregistrée (shared_preferences). */
 object PcPrefs {
     data class Conn(val host: String, val port: Int, val token: String, val hosts: List<String> = listOf(host)) {
-        val base: String get() = "http://$host:$port"
+        val base: String get() = baseOf(host)
+        fun baseOf(h: String): String = if (h.startsWith("http://") || h.startsWith("https://")) h.trimEnd('/') else "http://$h:$port"
         fun at(h: String) = Conn(h, port, token, hosts)
     }
 
@@ -179,7 +180,7 @@ class FractusService : Service() {
                 var firstError: Exception? = null
                 for (h in c.hosts) {
                     try {
-                        val cc = (URL("http://$h:${c.port}/api/events").openConnection() as HttpURLConnection).apply {
+                        val cc = (URL("${c.baseOf(h)}/api/events").openConnection() as HttpURLConnection).apply {
                             setRequestProperty("Authorization", "Bearer ${c.token}")
                             setRequestProperty("Accept", "text/event-stream")
                             connectTimeout = 5000

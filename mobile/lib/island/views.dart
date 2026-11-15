@@ -1122,15 +1122,26 @@ class _PhoneSettingsState extends State<PhoneSettings> {
                 child: Row(
                   children: [
                     Icon(
-                      PcConnectionInfo.isTailscale(h) ? Icons.public_rounded : Icons.wifi_rounded,
+                      PcConnectionInfo.isTunnel(h)
+                          ? Icons.language_rounded
+                          : (PcConnectionInfo.isTailscale(h) ? Icons.public_rounded : Icons.wifi_rounded),
                       size: 12,
                       color: h == widget.link.info!.host && widget.link.online ? Palette.green2 : Palette.dim3,
                     ),
                     const SizedBox(width: 6),
-                    Text(h, style: mono(11.5, color: h == widget.link.info!.host ? Palette.ink : Palette.dim)),
+                    Flexible(
+                      child: Text(
+                        h.replaceFirst(RegExp(r'^https?://'), ''),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: mono(11.5, color: h == widget.link.info!.host ? Palette.ink : Palette.dim),
+                      ),
+                    ),
                     const SizedBox(width: 6),
                     Text(
-                      PcConnectionInfo.isTailscale(h) ? 'Tailscale — de partout' : 'Wi-Fi — à la maison',
+                      PcConnectionInfo.isTunnel(h)
+                          ? 'Internet — de partout'
+                          : (PcConnectionInfo.isTailscale(h) ? 'Tailscale — de partout' : 'Wi-Fi — à la maison'),
                       style: ui(10.5, color: Palette.dim4),
                     ),
                   ],
@@ -1138,9 +1149,11 @@ class _PhoneSettingsState extends State<PhoneSettings> {
               ),
             const SizedBox(height: 4),
             Text(
-              widget.link.info!.hosts.any(PcConnectionInfo.isTailscale)
-                  ? 'Hors de chez toi, ouvre Tailscale sur le téléphone : Fractus bascule tout seul sur l\'adresse Tailscale.'
-                  : 'Pour te connecter hors de chez toi : installe Tailscale sur le PC (Réglages → Téléphone → Installer Tailscale) et sur le téléphone, même compte. L\'adresse s\'ajoutera ici toute seule.',
+              widget.link.info!.hosts.any(PcConnectionInfo.isTunnel)
+                  ? 'Hors de chez toi, Fractus passe tout seul par Internet (le tunnel du PC). Si le PC redémarre, il retrouve la nouvelle adresse grâce au code.'
+                  : (widget.link.info!.hosts.any(PcConnectionInfo.isTailscale)
+                      ? 'Hors de chez toi, ouvre Tailscale sur le téléphone : Fractus bascule tout seul sur l\'adresse Tailscale.'
+                      : 'Pour te connecter hors de chez toi : sur le PC, Réglages → Téléphone → « Accessible depuis Internet ». L\'adresse s\'ajoutera ici toute seule (ou rescanne le QR code).'),
               style: ui(11, color: Palette.dim3, height: 1.3),
             ),
           ],

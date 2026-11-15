@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'core/rendezvous.dart';
 import 'models.dart';
 import 'prefs.dart';
 
@@ -193,10 +194,14 @@ class PcLink extends ChangeNotifier {
       } catch (e) {
         if (gen != _generation) return;
         online = false;
-        error = e is PcError ? e.message : 'PC injoignable (${info?.host}:${info?.port})';
+        error = e is PcError ? e.message : 'PC injoignable (${_short(info?.host)})';
         notifyListeners();
         if (e is PcError && e.status == 401) {
           await Future<void>.delayed(const Duration(seconds: 10));
+        } else if (await _rendezvous()) {
+          // Le PC a une nouvelle adresse Internet : on y va tout de suite.
+          backoff = 1;
+          continue;
         }
       }
       await Future<void>.delayed(Duration(seconds: backoff));
@@ -234,13 +239,52 @@ class PcLink extends ChangeNotifier {
     return completer.future.timeout(const Duration(seconds: 6), onTimeout: () => firstOther);
   }
 
+  static String _short(String? h) {
+    if (h == null) return '';
+    return h.replaceFirst(RegExp(r'^https?://'), '').replaceAll(RegExp(r'/.*$'), '');
+  }
+
+  DateTime _lastRendezvous = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Le PC est introuvable : peut-être que son tunnel Internet a changé
+  /// d'adresse. On demande au point de rendez-vous (chiffré avec le code).
+  /// Vrai si on a appris une adresse nouvelle (devenue l'adresse courante).
+  Future<bool> _rendezvous() async {
+    final i = info;
+    if (i == null || i.token.isEmpty) return false;
+    final now = DateTime.now();
+    if (now.difference(_lastRendezvous) < const Duration(seconds: 45)) return false;
+    _lastRendezvous = now;
+    try {
+      final r = await http.get(Rendezvous.pollUri(i.token)).timeout(const Duration(seconds: 10));
+      if (r.statusCode != 200) return false;
+      final p = Rendezvous.latest(i.token, r.body);
+      final url = '${p?['url'] ?? ''}';
+      if (!PcConnectionInfo.isTunnel(url)) return false;
+      if (i.host == url) return false;
+      // Les anciennes adresses de tunnel ne reviendront pas : on les remplace.
+      final kept = i.hosts.where((h) => !PcConnectionInfo.isTunnel(h)).toList();
+      final fresh = PcConnectionInfo(host: url, port: i.port, token: i.token, hosts: kept);
+      info = fresh;
+      client = PcClient(fresh);
+      await Prefs.save(fresh);
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Le PC nous dit où il est joignable : on retient ses adresses pour plus tard.
   void _learnAddresses(PcStatus s) {
     final i = info;
     if (i == null || s.addresses.isEmpty) return;
     final fresh = s.addresses.where((a) => !i.hosts.contains(a)).toList();
-    if (fresh.isEmpty) return;
-    info = i.withHosts(fresh);
+    // Un nouveau tunnel remplace l'ancien (son adresse ne reviendra pas).
+    final tunnels = s.addresses.where(PcConnectionInfo.isTunnel).toSet();
+    final stale = tunnels.isEmpty ? const <String>[] : i.hosts.where((h) => PcConnectionInfo.isTunnel(h) && !tunnels.contains(h) && h != i.host).toList();
+    if (fresh.isEmpty && stale.isEmpty) return;
+    info = PcConnectionInfo(host: i.host, port: i.port, token: i.token, hosts: [...i.hosts.where((h) => !stale.contains(h)), ...fresh]);
     unawaited(Prefs.save(info!));
     notifyListeners();
   }
