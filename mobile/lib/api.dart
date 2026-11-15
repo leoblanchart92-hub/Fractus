@@ -214,7 +214,7 @@ class PcLink extends ChangeNotifier {
         if (gen != _generation) return;
         online = false;
         error = e is PcError ? e.message : 'PC injoignable';
-        if (_wasOnline || backoff == 1) note('Échec via ${_short(i.host)} : ${e is PcError ? e.message : e.runtimeType}');
+        if (_wasOnline || backoff == 1) note('Échec via ${_short(info?.host)} : ${e is PcError ? e.message : e.runtimeType}');
         _wasOnline = false;
         notifyListeners();
         if (e is PcError && e.status == 401) {
