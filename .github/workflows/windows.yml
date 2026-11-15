@@ -169,7 +169,8 @@ jobs:
 
       - name: Pas de clé de release — signature debug
         if: env.HAS_KEY != 'true'
-        run: echo "Secret ANDROID_KEYSTORE_B64 absent : l'APK sera signé avec une clé de debug (il faudra désinstaller avant d'installer)."
+        run: |
+          echo "Secret ANDROID_KEYSTORE_B64 absent - l'APK sera signé avec une clé de debug (il faudra désinstaller avant d'installer)."
 
       - name: Build APK
         working-directory: mobile
