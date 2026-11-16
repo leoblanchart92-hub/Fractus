@@ -66,10 +66,16 @@ class PcSettings {
         webSearch = j['webSearch'] == true,
         muted = j['muted'] == true,
         configured = j['configured'] == true,
+        engine = '${j['engine'] ?? 'groq'}',
+        engineStatus = '${j['engineStatus'] ?? ''}',
         alwaysAllow = ((j['alwaysAllow'] as List?) ?? const []).map((m) => '$m').toList();
   final String model, effectiveModel, workspace, baseDir;
   final List<String> models, alwaysAllow;
   final bool webSearch, muted, configured;
+
+  /// « ollama » (sur le PC) ou « groq » (cloud), et sa ligne d'état.
+  final String engine, engineStatus;
+  bool get local => engine != 'groq';
 }
 
 class PcQuestion {

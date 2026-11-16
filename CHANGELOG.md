@@ -4,6 +4,13 @@ Ce fichier est lu par l'application (PC et téléphone) pour la page « Nouveaut
 et sert de notes de version sur GitHub. Une section par version, la plus récente en haut :
 `## <version> · <date>`, puis des puces. Le gras, le code et les listes sont rendus.
 
+## 0.12.0 · 16 novembre 2026
+
+- **Le cerveau de Fractus tourne sur ton PC** : plus besoin de clé Groq. Réglages → Chat → « Sur ce PC (Ollama) ». Fractus **installe Ollama** lui-même (bouton *Installer Ollama*), le lance, et **télécharge le modèle** (`lfm3:1.7b` par défaut, modifiable) avec une barre de progression.
+- Rien ne part sur Internet, pas de quota. Pour une question difficile, le moteur **Dans le cloud (Groq)** reste à un clic, avec ta clé.
+- Les fichiers images sont décrits par un modèle vision d'Ollama s'il y en a un d'installé (ex. `qwen2.5vl:3b`).
+- Le téléphone affiche le moteur en cours et son état dans Réglages → Chat.
+
 ## 0.11.4 · 16 novembre 2026
 
 - **Nouveautés** : cette page, sur le PC (icône 🎁 dans l'en-tête de l'île, et Réglages → Version) et sur le téléphone (Réglages → Nouveautés). Elle s'ouvre toute seule après une mise à jour, le temps de voir ce qui a changé.

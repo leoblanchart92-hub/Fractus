@@ -518,7 +518,7 @@ class _PhoneChatState extends State<PhoneChat> {
                             ? 'Connecte-toi au PC pour discuter.'
                             : (st.settings?.configured ?? true)
                                 ? 'Demande-moi n\'importe quoi : je pilote ton PC, je code, et je retiens ce que tu me dis de retenir.'
-                                : 'Ajoute ta clé Groq dans les réglages du PC pour discuter.',
+                                : 'Le chat n\'est pas prêt sur le PC (Réglages → Chat).',
                         style: ui(12, color: Palette.dim3),
                       ),
                     ),
@@ -1357,14 +1357,19 @@ class _PhoneSettingsState extends State<PhoneSettings> {
             },
           ),
           if (online) ...[
-            _section('Chat (Groq) — sur le PC'),
-            Row(
-              children: [
-                Expanded(child: Text('Modèle : ${st.model.isEmpty ? 'automatique' : st.model}', maxLines: 1, overflow: TextOverflow.ellipsis, style: ui(12.5))),
-                _modelPicker(st),
-              ],
-            ),
-            if (st.effectiveModel.isNotEmpty) Text('utilisé : ${st.effectiveModel}', style: ui(10.5, color: Palette.dim4)),
+            _section('Chat — sur le PC'),
+            if (st.local) ...[
+              Text('Moteur : Ollama, sur le PC · ${st.effectiveModel}', maxLines: 1, overflow: TextOverflow.ellipsis, style: ui(12.5)),
+              if (st.engineStatus.isNotEmpty) Text(st.engineStatus, maxLines: 2, overflow: TextOverflow.ellipsis, style: ui(10.5, color: Palette.dim4)),
+            ] else ...[
+              Row(
+                children: [
+                  Expanded(child: Text('Modèle Groq : ${st.model.isEmpty ? 'automatique' : st.model}', maxLines: 1, overflow: TextOverflow.ellipsis, style: ui(12.5))),
+                  _modelPicker(st),
+                ],
+              ),
+              if (st.effectiveModel.isNotEmpty) Text('utilisé : ${st.effectiveModel}', style: ui(10.5, color: Palette.dim4)),
+            ],
             const SizedBox(height: 6),
             Row(
               children: [
@@ -1373,7 +1378,7 @@ class _PhoneSettingsState extends State<PhoneSettings> {
                 IslandButton(label: 'OK', compact: true, onTap: () => _patch({'workspace': _workspace.text.trim()})),
               ],
             ),
-            _toggle('Recherche web', st.webSearch, (v) => _patch({'webSearch': v})),
+            if (!st.local) _toggle('Recherche web', st.webSearch, (v) => _patch({'webSearch': v})),
             _toggle('Son coupé sur le PC', st.muted, (v) => _patch({'muted': v})),
             _section('Mémoire et historique'),
             Row(

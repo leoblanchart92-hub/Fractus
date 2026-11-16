@@ -371,6 +371,8 @@ class RemoteServer {
         'webSearch': state.settings.chatWebSearch,
         'alwaysAllow': state.settings.alwaysAllow.toList()..sort(),
         'configured': chat.configured,
+        'engine': chat.engine,
+        'engineStatus': chat.isLocal ? (chat.ollama?.statusLine ?? '') : 'Groq',
         'muted': state.settings.muted,
       },
       'pending': a == null
@@ -553,7 +555,7 @@ class RemoteServer {
         final text = (b['text'] ?? '').toString().trim();
         if (text.isEmpty) return await _json(res, {'error': 'text manquant'}, status: 400);
         if (state.chatBusy) return await _json(res, {'error': 'Fractus est déjà occupé.'}, status: 409);
-        if (!chat.configured) return await _json(res, {'error': 'Pas de clé Groq sur le PC (Réglages → Chat).'}, status: 409);
+        if (!chat.configured) return await _json(res, {'error': 'Le chat n\'est pas configuré sur le PC (Réglages → Chat).'}, status: 409);
         // L'île s'ouvre sur le chat pour que l'écran du PC montre ce qui se passe.
         controller.open(IslandView.prompt);
         unawaited(ChatRunner.send(state, chat, text));

@@ -17,6 +17,7 @@ import 'services/conversation_store.dart';
 import 'services/hook_server.dart';
 import 'services/journal.dart';
 import 'services/memory.dart';
+import 'services/ollama_service.dart';
 import 'services/news.dart';
 import 'services/remote_server.dart';
 import 'services/startup_service.dart';
@@ -48,10 +49,15 @@ Future<void> main() async {
   final memory = LongTermMemory();
   final window = WindowService(state, controller);
   final hooks = HookServer(controller);
+  // Le moteur local du chat (Ollama) : installé, lancé et alimenté en modèles par Fractus.
+  final ollama = OllamaService();
   final chat = ChatService(
     apiKey: settings.chatApiKey,
     model: settings.chatModel,
     webSearch: settings.chatWebSearch,
+    engine: settings.chatEngine,
+    ollamaModel: settings.ollamaModel,
+    ollama: ollama,
     tools: ChatTools(state, controller: controller)
       ..workspace = settings.chatWorkspace
       ..journal = journal
@@ -61,8 +67,11 @@ Future<void> main() async {
     chat.apiKey = state.settings.chatApiKey;
     chat.model = state.settings.chatModel;
     chat.webSearch = state.settings.chatWebSearch;
+    chat.engine = state.settings.chatEngine;
+    chat.ollamaModel = state.settings.ollamaModel;
     chat.tools.workspace = state.settings.chatWorkspace;
   });
+  ollama.addListener(state.touch);
   final startup = StartupService();
   final updates = UpdateService(autoCheck: settings.autoUpdate);
   // Le téléphone : serveur sur le réseau local, protégé par le code d'appairage.
@@ -153,6 +162,12 @@ Future<void> main() async {
   await startup.apply(settings.launchAtStartup);
   await updates.init();
   await news.load(updates.currentVersion);
+  // Ollama : on regarde s'il est là, et on le réveille s'il dort (sans rien télécharger tout seul).
+  if (settings.chatEngine != 'groq') {
+    unawaited(ollama.refresh().then((_) async {
+      if (ollama.status == OllamaStatus.stopped) await ollama.start();
+    }));
+  }
   state.touch();
 
   // Après une mise à jour : la page « Nouveautés » s'ouvre une fois, après le

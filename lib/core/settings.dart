@@ -15,6 +15,12 @@ class Settings {
   bool muted = false;
   /// Port local du serveur de hooks (l'agent y poste ses événements).
   int hookPort = 7788;
+  /// Le moteur du chat : « ollama » (un modèle sur ce PC, gratuit, hors ligne)
+  /// ou « groq » (dans le cloud, avec une clé).
+  String chatEngine = 'ollama';
+  /// Le modèle Ollama (téléchargé par Fractus s'il manque).
+  String ollamaModel = defaultOllamaModel;
+  static const String defaultOllamaModel = 'lfm3:1.7b';
   /// Clé API Groq (gsk_…) pour le chat (vide = chat désactivé).
   String chatApiKey = '';
   /// Modèle Groq (vide = le plus capable disponible sur le compte, choisi automatiquement).
@@ -44,6 +50,8 @@ class Settings {
         'openOnHover': openOnHover,
         'muted': muted,
         'hookPort': hookPort,
+        'chatEngine': chatEngine,
+        'ollamaModel': ollamaModel,
         'chatApiKey': chatApiKey,
         'chatModel': chatModel,
         'chatWebSearch': chatWebSearch,
@@ -64,6 +72,11 @@ class Settings {
     s.muted = j['muted'] == true;
     s.hookPort = (j['hookPort'] is int) ? j['hookPort'] as int : 7788;
     s.chatApiKey = (j['chatApiKey'] ?? '') as String;
+    final engine = (j['chatEngine'] ?? '').toString();
+    // Les anciens réglages (pas de moteur noté) : Groq si une clé est là, sinon Ollama.
+    s.chatEngine = engine == 'groq' || engine == 'ollama' ? engine : (s.chatApiKey.startsWith('gsk_') ? 'groq' : 'ollama');
+    final om = (j['ollamaModel'] ?? '').toString().trim();
+    s.ollamaModel = om.isEmpty ? defaultOllamaModel : om;
     // Un ancien réglage d'un autre fournisseur ne vaut rien chez Groq : on repart à vide.
     if (!s.chatApiKey.startsWith('gsk_')) s.chatApiKey = '';
     // Un modèle d'un autre fournisseur (claude-…, gpt-4o…) n'existe pas chez Groq.

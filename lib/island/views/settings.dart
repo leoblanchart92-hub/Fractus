@@ -56,6 +56,7 @@ class _SettingsViewState extends State<SettingsView> {
   late final TextEditingController _key = TextEditingController(text: widget.state.settings.chatApiKey);
   late final TextEditingController _model = TextEditingController(text: widget.state.settings.chatModel);
   late final TextEditingController _workspace = TextEditingController(text: widget.state.settings.chatWorkspace);
+  late final TextEditingController _ollamaModel = TextEditingController(text: widget.state.settings.ollamaModel);
   bool _savedChat = false;
   bool _testing = false;
   String? _testResult;
@@ -122,6 +123,7 @@ class _SettingsViewState extends State<SettingsView> {
     _key.dispose();
     _model.dispose();
     _workspace.dispose();
+    _ollamaModel.dispose();
     _port.dispose();
     super.dispose();
   }
@@ -225,46 +227,35 @@ class _SettingsViewState extends State<SettingsView> {
                 ],
               ),
             ],
-            _section('Chat (Groq)'),
+            _section('Chat — le cerveau de Fractus'),
             Row(
               children: [
-                Expanded(flex: 3, child: _field(_key, hint: 'Clé API Groq (gsk_…) — gratuite sur console.groq.com', obscure: true)),
+                _engineChip('Sur ce PC (Ollama)', 'ollama', s),
                 const SizedBox(width: 6),
-                IslandButton(
-                  label: _testing ? 'Test…' : 'Tester',
-                  compact: true,
-                  onTap: _testing ? () {} : _testKey,
-                ),
-                const SizedBox(width: 6),
-                IslandButton(
-                  label: _savedChat ? 'Enregistré' : 'Enregistrer',
-                  compact: true,
-                  primary: true,
-                  onTap: _saveChat,
-                ),
-              ],
-            ),
-            if (_testResult != null) ...[
-              const SizedBox(height: 3),
-              Text(_testResult!, style: ui(11, color: _testOk ? Palette.dim : Palette.redText)),
-            ],
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Expanded(child: _field(_model, hint: 'Modèle : automatique (le plus puissant du compte)')),
-                const SizedBox(width: 6),
-                _modelPicker(),
+                _engineChip('Dans le cloud (Groq)', 'groq', s),
               ],
             ),
             const SizedBox(height: 4),
-            _field(_workspace, hint: 'Dossier de travail de l\'agent (vide = projet de l\'agent en avant, sinon ton profil)'),
-            _toggle('Recherche web et exécution de code (groq/compound)', s.chatWebSearch, (v) {
-              s.chatWebSearch = v;
-              widget.state.saveSettingsSoon();
-            }),
+            if (s.chatEngine != 'groq') ..._ollamaPanel(s) else ..._groqPanel(s),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(child: _field(_workspace, hint: 'Dossier de travail de l\'agent (vide = projet de l\'agent en avant, sinon ton profil)')),
+                const SizedBox(width: 6),
+                IslandButton(label: _savedChat ? 'Enregistré' : 'Enregistrer', compact: true, primary: true, onTap: _saveChat),
+              ],
+            ),
+            if (s.chatEngine == 'groq')
+              _toggle('Recherche web et exécution de code (groq/compound)', s.chatWebSearch, (v) {
+                s.chatWebSearch = v;
+                widget.state.saveSettingsSoon();
+              }),
             Text(
-              'Fractus agit comme Claude Code : il lit, cherche, écrit, modifie et lance des commandes dans le dossier de travail — '
-              'chaque action passe par la carte Autoriser / Refuser / Toujours. La clé reste sur cette machine.',
+              s.chatEngine == 'groq'
+                  ? 'Fractus agit comme Claude Code : il lit, cherche, écrit, modifie et lance des commandes dans le dossier de travail — '
+                      'chaque action passe par la carte Autoriser / Refuser / Toujours. La clé reste sur cette machine.'
+                  : 'Tout tourne sur ce PC : rien ne part sur Internet, pas de clé, pas de quota. Un petit modèle est moins malin qu\'un gros du cloud : '
+                      'pour les tâches difficiles, tu peux basculer sur Groq le temps d\'une question.',
               style: ui(11, color: Palette.dim3),
             ),
             _section('Mémoire et historique'),
@@ -525,8 +516,208 @@ class _SettingsViewState extends State<SettingsView> {
     s.chatApiKey = _key.text.trim();
     s.chatModel = _model.text.trim();
     s.chatWorkspace = _workspace.text.trim();
+    final om = _ollamaModel.text.trim();
+    s.ollamaModel = om.isEmpty ? Settings.defaultOllamaModel : om;
     widget.state.saveSettingsSoon();
     setState(() => _savedChat = true);
+  }
+
+  // ── Le moteur ───────────────────────────────────────────────────────────────
+
+  Widget _engineChip(String label, String value, Settings s) {
+    final on = (s.chatEngine == 'groq') == (value == 'groq');
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () {
+          if (on) return;
+          _saveChat();
+          s.chatEngine = value;
+          widget.state.saveSettingsSoon();
+          if (value == 'ollama') unawaited(_ollamaRefresh());
+          setState(() {});
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          height: 24,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: on ? Palette.accent.withValues(alpha: 0.16) : Palette.tabOn,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: on ? Palette.accent : Palette.hairline),
+          ),
+          child: Text(label, style: ui(11.5, weight: on ? FontWeight.w600 : FontWeight.w400, color: on ? Palette.ink : Palette.dim)),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _ollamaRefresh() async {
+    final o = widget.chat.ollama;
+    if (o == null) return;
+    await o.refresh();
+    if (o.status == OllamaStatus.stopped) await o.start();
+  }
+
+  List<Widget> _ollamaPanel(Settings s) {
+    final o = widget.chat.ollama;
+    if (o == null) return [Text('Ollama indisponible dans cette version.', style: ui(11, color: Palette.redText))];
+    final model = _ollamaModel.text.trim().isEmpty ? Settings.defaultOllamaModel : _ollamaModel.text.trim();
+    final has = o.ready && o.hasModel(model);
+    final Color stColor = switch (o.status) {
+      OllamaStatus.ready => has ? Palette.green2 : Palette.amber,
+      OllamaStatus.error => Palette.redText,
+      OllamaStatus.absent || OllamaStatus.stopped => Palette.amber,
+      _ => Palette.dim,
+    };
+    final String line = o.status == OllamaStatus.ready && !has
+        ? 'Ollama prêt — le modèle $model n\'est pas encore téléchargé.'
+        : (o.status == OllamaStatus.ready && has ? 'Prêt : $model sur ce PC (${o.models.length} modèle${o.models.length > 1 ? 's' : ''} installé${o.models.length > 1 ? 's' : ''}).' : o.statusLine);
+    return [
+      Row(
+        children: [
+          Container(width: 7, height: 7, decoration: BoxDecoration(color: stColor, shape: BoxShape.circle)),
+          const SizedBox(width: 6),
+          Expanded(child: Text(line, maxLines: 2, overflow: TextOverflow.ellipsis, style: ui(11.5, color: stColor))),
+          const SizedBox(width: 6),
+          if (o.status == OllamaStatus.absent)
+            IslandButton(label: 'Installer Ollama', compact: true, primary: true, onTap: () => unawaited(o.install()))
+          else if (o.status == OllamaStatus.stopped || o.status == OllamaStatus.error)
+            IslandButton(label: o.status == OllamaStatus.error ? 'Réessayer' : 'Lancer Ollama', compact: true, primary: true, onTap: () => unawaited(_ollamaRefresh()))
+          else if (o.status == OllamaStatus.ready && !has)
+            IslandButton(label: 'Télécharger $model', compact: true, primary: true, onTap: () => unawaited(o.pull(model)))
+          else if (o.status == OllamaStatus.unknown)
+            IslandButton(label: 'Vérifier', compact: true, onTap: () => unawaited(_ollamaRefresh())),
+        ],
+      ),
+      if (o.busy) ...[
+        const SizedBox(height: 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: LinearProgressIndicator(
+            value: o.progress > 0 && o.progress < 1 ? o.progress : null,
+            minHeight: 4,
+            backgroundColor: Palette.tabOn,
+            color: Palette.accent,
+          ),
+        ),
+      ],
+      const SizedBox(height: 4),
+      Row(
+        children: [
+          Expanded(child: _field(_ollamaModel, hint: 'Modèle Ollama (ex. ${Settings.defaultOllamaModel})')),
+          const SizedBox(width: 6),
+          _ollamaModelPicker(o),
+          const SizedBox(width: 6),
+          IslandButton(
+            label: _testing ? 'Test…' : 'Tester',
+            compact: true,
+            onTap: _testing ? () {} : _testOllama,
+          ),
+        ],
+      ),
+      if (_testResult != null) ...[
+        const SizedBox(height: 3),
+        Text(_testResult!, style: ui(11, color: _testOk ? Palette.dim : Palette.redText)),
+      ],
+    ];
+  }
+
+  Widget _ollamaModelPicker(OllamaService o) {
+    final models = o.models;
+    return PopupMenuButton<String>(
+      tooltip: models.isEmpty ? 'Aucun modèle installé' : 'Modèles installés',
+      color: Palette.card,
+      padding: EdgeInsets.zero,
+      onSelected: (id) {
+        _ollamaModel.text = id;
+        _saveChat();
+        setState(() {});
+      },
+      itemBuilder: (_) => [
+        if (models.isEmpty)
+          PopupMenuItem(enabled: false, height: 30, child: Text('Aucun modèle téléchargé', style: ui(12, color: Palette.dim3))),
+        for (final m in models)
+          PopupMenuItem(
+            value: m.name,
+            height: 30,
+            child: Row(
+              children: [
+                Expanded(child: Text(m.name, style: ui(12))),
+                if (m.vision) Padding(padding: const EdgeInsets.only(left: 6), child: Icon(Icons.visibility_outlined, size: 12, color: Palette.dim3)),
+                const SizedBox(width: 8),
+                Text(m.size > 0 ? '${(m.size / 1024 / 1024 / 1024).toStringAsFixed(1).replaceAll('.', ',')} Go' : '', style: ui(10.5, color: Palette.dim4)),
+              ],
+            ),
+          ),
+      ],
+      child: Container(
+        height: 26,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(color: Palette.tabOn, borderRadius: BorderRadius.circular(7), border: Border.all(color: Palette.hairline)),
+        child: const Icon(Icons.expand_more_rounded, size: 16, color: Palette.dim),
+      ),
+    );
+  }
+
+  Future<void> _testOllama() async {
+    _saveChat();
+    final o = widget.chat.ollama;
+    if (o == null) return;
+    setState(() {
+      _testing = true;
+      _testResult = null;
+    });
+    try {
+      await _ollamaRefresh();
+      if (!o.ready) throw Exception(o.statusLine);
+      final m = widget.chat.effectiveModel;
+      if (!o.hasModel(m)) throw Exception('le modèle $m n\'est pas téléchargé (bouton Télécharger).');
+      final sw = Stopwatch()..start();
+      final reply = await widget.chat.send([ChatMessage('user', 'Réponds juste « ok ».')]);
+      sw.stop();
+      final ok = !reply.startsWith('Impossible') && !reply.startsWith('Ollama');
+      setState(() {
+        _testOk = ok;
+        _testResult = ok ? 'Ça répond en ${(sw.elapsedMilliseconds / 1000).toStringAsFixed(1)} s : « ${reply.length > 60 ? '${reply.substring(0, 60)}…' : reply} »' : reply;
+      });
+    } catch (e) {
+      setState(() {
+        _testOk = false;
+        _testResult = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
+  }
+
+  List<Widget> _groqPanel(Settings s) {
+    return [
+      Row(
+        children: [
+          Expanded(flex: 3, child: _field(_key, hint: 'Clé API Groq (gsk_…) — gratuite sur console.groq.com', obscure: true)),
+          const SizedBox(width: 6),
+          IslandButton(
+            label: _testing ? 'Test…' : 'Tester',
+            compact: true,
+            onTap: _testing ? () {} : _testKey,
+          ),
+        ],
+      ),
+      if (_testResult != null) ...[
+        const SizedBox(height: 3),
+        Text(_testResult!, style: ui(11, color: _testOk ? Palette.dim : Palette.redText)),
+      ],
+      const SizedBox(height: 4),
+      Row(
+        children: [
+          Expanded(child: _field(_model, hint: 'Modèle : automatique (le plus puissant du compte)')),
+          const SizedBox(width: 6),
+          _modelPicker(),
+        ],
+      ),
+    ];
   }
 
   Future<void> _testKey() async {

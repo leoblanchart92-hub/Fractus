@@ -9,11 +9,14 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show SocketException;
 
 import 'package:http/http.dart' as http;
 
 import '../core/models.dart';
+import '../core/settings.dart';
 import 'chat_tools.dart';
+import 'ollama_service.dart';
 
 class GroqModel {
   const GroqModel(this.id, {this.contextWindow = 0, this.owner = ''});
@@ -23,9 +26,27 @@ class GroqModel {
 }
 
 class ChatService {
-  ChatService({required this.apiKey, required this.model, required this.tools, this.webSearch = false}) {
+  ChatService({
+    required this.apiKey,
+    required this.model,
+    required this.tools,
+    this.webSearch = false,
+    this.engine = 'ollama',
+    this.ollamaModel = Settings.defaultOllamaModel,
+    this.ollama,
+  }) {
     tools.vision = describeImage;
   }
+
+  /// « ollama » : un modèle sur ce PC ; « groq » : dans le cloud avec une clé.
+  String engine;
+  String ollamaModel;
+
+  /// Le moteur local (installation, lancement, modèles) ; null dans les tests.
+  OllamaService? ollama;
+
+  bool get isLocal => engine != 'groq';
+  String get engineName => isLocal ? 'Ollama' : 'Groq';
 
   /// Modèles qui voient les images, du meilleur au plus léger.
   static const List<String> visionPreferred = [
@@ -33,7 +54,8 @@ class ChatService {
     'meta-llama/llama-4-scout-17b-16e-instruct',
   ];
 
-  static const String baseUrl = 'https://api.groq.com/openai/v1';
+  static const String groqUrl = 'https://api.groq.com/openai/v1';
+  String get baseUrl => isLocal ? '${OllamaService.host}/v1' : groqUrl;
 
   /// Les modèles qu'on préfère, du plus capable au plus modeste. Le premier
   /// disponible sur le compte est retenu quand le réglage « Modèle » est vide.
@@ -63,10 +85,11 @@ class ChatService {
   List<GroqModel> models = const [];
   String? _autoModel;
 
-  bool get configured => apiKey.trim().isNotEmpty;
+  bool get configured => isLocal || apiKey.trim().isNotEmpty;
 
   /// Le modèle réellement utilisé pour la prochaine requête.
   String get effectiveModel {
+    if (isLocal) return ollamaModel.trim().isEmpty ? Settings.defaultOllamaModel : ollamaModel.trim();
     if (webSearch) return compoundModel;
     if (model.trim().isNotEmpty) return model.trim();
     return _autoModel ?? preferred[3];
@@ -74,6 +97,7 @@ class ChatService {
 
   /// Décrit une image (JPEG par défaut, sinon `mime`) avec un modèle vision de Groq.
   Future<String> describeImage(List<int> jpeg, String prompt, {String mime = 'image/jpeg'}) async {
+    if (isLocal) return _describeImageLocal(jpeg, prompt);
     if (!configured) throw Exception('clé Groq manquante');
     if (models.isEmpty) {
       try {
@@ -126,9 +150,37 @@ class ChatService {
     return content is String ? content.trim() : '';
   }
 
+  /// Un modèle vision d'Ollama regarde l'image (il en faut un d'installé).
+  Future<String> _describeImageLocal(List<int> bytes, String prompt) async {
+    final o = ollama;
+    if (o != null && o.models.isEmpty) await o.refreshModels();
+    final vision = (o?.models ?? const <OllamaModel>[]).where((m) => m.vision).toList();
+    if (vision.isEmpty) {
+      throw Exception('aucun modèle vision dans Ollama — télécharge-en un (ex. qwen2.5vl:3b ou gemma3:4b) dans Réglages → Chat');
+    }
+    final res = await http
+        .post(
+          Uri.parse('${OllamaService.host}/api/chat'),
+          headers: const {'content-type': 'application/json'},
+          body: jsonEncode({
+            'model': vision.first.name,
+            'stream': false,
+            'options': {'temperature': 0.2, 'num_ctx': 8192},
+            'messages': [
+              {'role': 'user', 'content': prompt, 'images': [base64Encode(bytes)]},
+            ],
+          }),
+        )
+        .timeout(const Duration(minutes: 3));
+    if (res.statusCode != 200) throw Exception(_errorText(res));
+    final j = jsonDecode(utf8.decode(res.bodyBytes));
+    final content = j['message']?['content'];
+    return content is String ? content.trim() : '';
+  }
+
   Map<String, String> get _headers => {
         'content-type': 'application/json',
-        'authorization': 'Bearer ${apiKey.trim()}',
+        if (!isLocal) 'authorization': 'Bearer ${apiKey.trim()}',
       };
 
   /// Liste les modèles du compte ; sert aussi à tester la clé.
@@ -172,7 +224,7 @@ class ChatService {
   }
 
   Future<void> _ensureAutoModel() async {
-    if (_autoModel != null || model.trim().isNotEmpty || webSearch) return;
+    if (isLocal || _autoModel != null || model.trim().isNotEmpty || webSearch) return;
     try {
       await listModels();
     } catch (_) {}
@@ -237,7 +289,7 @@ ${tools.sessionsSummary()}''';
   /// Évite de dépasser le contexte : au-delà d'un budget de caractères, les
   /// plus vieux résultats d'outils sont remplacés par un résumé.
   void _prune(List<Map<String, dynamic>> messages) {
-    const budget = 110000;
+    final budget = isLocal ? 40000 : 110000;
     int size() => messages.fold<int>(0, (n, m) => n + (m['content']?.toString().length ?? 0));
     for (var i = 1; i < messages.length - 6 && size() > budget; i++) {
       final m = messages[i];
@@ -255,6 +307,10 @@ ${tools.sessionsSummary()}''';
     void Function(String status)? onStatus,
   }) async {
     if (!configured) return 'Ajoute ta clé Groq dans Réglages → Chat (gratuite sur console.groq.com).';
+    if (isLocal) {
+      final notReady = await _localNotReady(onStatus);
+      if (notReady != null) return notReady;
+    }
     await _ensureAutoModel();
     var memoryFacts = '';
     try {
@@ -283,7 +339,7 @@ ${tools.sessionsSummary()}''';
           }),
     ];
 
-    final useTools = !webSearch;
+    final useTools = isLocal || !webSearch;
     var answer = '';
     final lastUser = history.lastWhere((m) => m.role == 'user', orElse: () => ChatMessage('user', '')).modelText;
     tools.begin(lastUser);
@@ -327,14 +383,52 @@ ${tools.sessionsSummary()}''';
       tools.end(text);
       return text;
     } on TimeoutException {
-      tools.end('Groq ne répond pas.', error: true);
-      return 'Groq ne répond pas (délai dépassé).';
+      tools.end('$engineName ne répond pas.', error: true);
+      return isLocal
+          ? 'Ollama ne répond pas (délai dépassé). Le modèle est peut-être trop lourd pour ce PC : essaie un modèle plus petit dans Réglages → Chat.'
+          : 'Groq ne répond pas (délai dépassé).';
     } catch (e) {
       final msg = e.toString().replaceFirst('Exception: ', '');
-      final text = answer.trim().isNotEmpty ? answer.trim() : 'Impossible de joindre Groq : $msg';
+      final text = answer.trim().isNotEmpty ? answer.trim() : 'Impossible de joindre $engineName : $msg';
       tools.end(text, error: answer.trim().isEmpty);
       return text;
     }
+  }
+
+  /// Ollama doit tourner et avoir le modèle ; sinon on essaie de le lancer, et
+  /// on explique quoi faire. Null quand tout est prêt.
+  Future<String?> _localNotReady(void Function(String status)? onStatus) async {
+    final o = ollama;
+    if (o == null) return null;
+    if (!o.ready) {
+      onStatus?.call('je réveille Ollama');
+      await o.refresh();
+      if (o.status == OllamaStatus.stopped) await o.start();
+    }
+    switch (o.status) {
+      case OllamaStatus.absent:
+        return 'Ollama n\'est pas installé sur ce PC. Va dans Réglages → Chat → **Installer Ollama** : je m\'occupe de tout (téléchargement, installation, puis le modèle).';
+      case OllamaStatus.installing:
+      case OllamaStatus.starting:
+        return 'Ollama se prépare (${o.statusLine}). Réessaie dans un instant.';
+      case OllamaStatus.pulling:
+        return 'Le modèle ${o.pulling ?? ''} est en cours de téléchargement (${o.progressLabel}). Réessaie quand c\'est fini.';
+      case OllamaStatus.error:
+        return 'Ollama : ${o.error ?? 'erreur'}. Voir Réglages → Chat.';
+      case OllamaStatus.unknown:
+      case OllamaStatus.stopped:
+        return 'Ollama ne tourne pas sur ce PC. Réglages → Chat → **Lancer Ollama**.';
+      case OllamaStatus.ready:
+        break;
+    }
+    final m = effectiveModel;
+    if (!o.hasModel(m)) {
+      if (o.models.isEmpty) await o.refreshModels();
+      if (!o.hasModel(m)) {
+        return 'Le modèle **$m** n\'est pas encore sur ce PC. Réglages → Chat → **Télécharger** (une fois, quelques centaines de Mo).';
+      }
+    }
+    return null;
   }
 
   /// Modèles momentanément saturés (429) → heure de fin de leur pénalité.
@@ -373,6 +467,7 @@ ${tools.sessionsSummary()}''';
     required void Function(String) onDelta,
     void Function(String status)? onStatus,
   }) async {
+    if (isLocal) return _streamOnceOllama(messages, useTools: useTools, onDelta: onDelta);
     var model = _modelNow();
     var attempt = 0;
     while (true) {
@@ -426,6 +521,117 @@ ${tools.sessionsSummary()}''';
         client.close();
       }
     }
+  }
+
+  /// Ollama en natif (/api/chat) : on y règle le contexte (num_ctx), et les
+  /// appels d'outils arrivent déjà décodés. Même résultat qu'un tour OpenAI.
+  Future<_Turn> _streamOnceOllama(
+    List<Map<String, dynamic>> messages, {
+    required bool useTools,
+    required void Function(String) onDelta,
+  }) async {
+    final converted = <Map<String, dynamic>>[];
+    for (final m in messages) {
+      final role = m['role'];
+      if (role == 'tool') {
+        converted.add({'role': 'tool', 'content': '${m['content'] ?? ''}', 'tool_name': '${m['name'] ?? ''}'});
+        continue;
+      }
+      final out = <String, dynamic>{'role': role, 'content': '${m['content'] ?? ''}'};
+      final tcs = m['tool_calls'];
+      if (tcs is List && tcs.isNotEmpty) {
+        out['tool_calls'] = [
+          for (final tc in tcs.whereType<Map>())
+            {
+              'function': {
+                'name': (tc['function'] as Map?)?['name'] ?? '',
+                'arguments': _argsMap((tc['function'] as Map?)?['arguments']),
+              },
+            },
+        ];
+      }
+      converted.add(out);
+    }
+    final body = <String, dynamic>{
+      'model': effectiveModel,
+      'messages': converted,
+      'stream': true,
+      'options': {'temperature': 0.4, 'num_ctx': 16384, 'num_predict': 2048},
+      if (useTools) 'tools': tools.definitions,
+    };
+    final req = http.Request('POST', Uri.parse('${OllamaService.host}/api/chat'))
+      ..headers['content-type'] = 'application/json'
+      ..body = jsonEncode(body);
+    final client = http.Client();
+    try {
+      final http.StreamedResponse res;
+      try {
+        // Le premier jeton peut tarder : chargement du modèle en mémoire.
+        res = await client.send(req).timeout(const Duration(minutes: 3));
+      } on SocketException {
+        throw Exception('Ollama ne tourne pas sur ce PC (Réglages → Chat → Lancer Ollama).');
+      }
+      if (res.statusCode != 200) {
+        final text = await res.stream.bytesToString();
+        if (res.statusCode == 400 && useTools && _looksLikeParamError(text)) {
+          // Ce modèle ne sait pas appeler d'outils : on répond sans.
+          return await _streamOnceOllama(messages, useTools: false, onDelta: onDelta);
+        }
+        throw Exception(_errorTextRaw(res.statusCode, text));
+      }
+      final turn = _Turn();
+      final buffer = StringBuffer();
+      await for (final line in res.stream.transform(utf8.decoder).transform(const LineSplitter()).timeout(const Duration(minutes: 3))) {
+        if (line.trim().isEmpty) continue;
+        Map<String, dynamic> j;
+        try {
+          j = jsonDecode(line) as Map<String, dynamic>;
+        } catch (_) {
+          continue;
+        }
+        if (j['error'] != null) throw Exception('Ollama : ${j['error']}');
+        final msg = j['message'];
+        if (msg is Map) {
+          final content = msg['content'];
+          if (content is String && content.isNotEmpty) {
+            buffer.write(content);
+            onDelta(buffer.toString());
+          }
+          final tcs = msg['tool_calls'];
+          if (tcs is List) {
+            for (final tc in tcs.whereType<Map>()) {
+              final fn = tc['function'];
+              if (fn is! Map) continue;
+              final name = '${fn['name'] ?? ''}';
+              if (name.isEmpty) continue;
+              final args = fn['arguments'];
+              turn.toolCalls.add(_ToolCall()
+                ..name = name
+                ..arguments = args is String ? args : jsonEncode(args ?? {}));
+            }
+          }
+        }
+        if (j['done'] == true) break;
+      }
+      turn.content = buffer.toString();
+      for (var i = 0; i < turn.toolCalls.length; i++) {
+        turn.toolCalls[i].id = 'call_$i';
+      }
+      return turn;
+    } finally {
+      client.close();
+    }
+  }
+
+  static Map<String, dynamic> _argsMap(Object? a) {
+    if (a is Map) return Map<String, dynamic>.from(a);
+    if (a is String && a.trim().isNotEmpty) {
+      try {
+        final d = jsonDecode(a);
+        if (d is Map) return Map<String, dynamic>.from(d);
+      } catch (_) {}
+    }
+    return {};
   }
 
   Future<_Turn> _readStream(http.StreamedResponse res, void Function(String) onDelta) async {
@@ -521,7 +727,7 @@ ${tools.sessionsSummary()}''';
       detail = 'limite de débit Groq atteinte (offre gratuite : quelques milliers de tokens par minute)'
           '${m != null ? ' — réessaie dans ${m.group(1)}' : ''}. Astuce : Réglages → Chat → choisis un modèle plus léger, ou patiente une minute.';
     }
-    if (status == 404) detail = 'modèle introuvable — choisis-en un autre dans Réglages → Chat.';
+    if (status == 404) detail = 'modèle introuvable — choisis-en un autre (ou télécharge-le) dans Réglages → Chat.';
     return 'Erreur $status : $detail';
   }
 }
