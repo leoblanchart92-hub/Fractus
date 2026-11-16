@@ -21,8 +21,9 @@ class Changelog {
     String date = '';
     final body = StringBuffer();
     void flush() {
-      if (version == null) return;
-      out.add(ReleaseNote(version: version!, date: date, body: body.toString().trim()));
+      final v = version;
+      if (v == null) return;
+      out.add(ReleaseNote(version: v, date: date, body: body.toString().trim()));
       body.clear();
     }
 
