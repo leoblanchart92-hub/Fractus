@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../core/layout.dart';
 import '../../core/settings.dart';
 import '../../core/state.dart';
 import '../../core/theme.dart';
@@ -491,6 +492,8 @@ class _SettingsViewState extends State<SettingsView> {
                       child: Text(txt,
                           style: ui(12, color: u.status == UpdateStatus.error ? Palette.redText : Palette.dim)),
                     ),
+                    IslandButton(label: 'Nouveautés', compact: true, onTap: () => widget.state.setView(IslandView.news)),
+                    const SizedBox(width: 6),
                     if (u.status == UpdateStatus.available)
                       IslandButton(label: 'Installer', compact: true, primary: true, onTap: u.install)
                     else

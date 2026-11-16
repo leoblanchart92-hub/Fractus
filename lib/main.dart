@@ -17,6 +17,7 @@ import 'services/conversation_store.dart';
 import 'services/hook_server.dart';
 import 'services/journal.dart';
 import 'services/memory.dart';
+import 'services/news.dart';
 import 'services/remote_server.dart';
 import 'services/startup_service.dart';
 import 'services/tray_service.dart';
@@ -126,8 +127,11 @@ Future<void> main() async {
     await tray.stop();
   };
 
+  final news = News(settings);
+
   runApp(FractusApp(
     state: state,
+    news: news,
     controller: controller,
     window: window,
     hooks: hooks,
@@ -148,7 +152,21 @@ Future<void> main() async {
   await startup.init();
   await startup.apply(settings.launchAtStartup);
   await updates.init();
+  await news.load(updates.currentVersion);
   state.touch();
+
+  // Après une mise à jour : la page « Nouveautés » s'ouvre une fois, après le
+  // salut, et se referme toute seule si on ne la touche pas.
+  void showNews() {
+    if (!news.shouldShowOnLaunch) return;
+    controller.open(IslandView.news);
+    Timer(const Duration(seconds: 20), () {
+      if (state.view == IslandView.news && !state.pinned) {
+        state.setView(state.defaultView());
+        controller.close();
+      }
+    });
+  }
 
   // Le salut au lancement : Fractus sort, fait coucou, puis se retire.
   if (settings.greetOnLaunch) {
@@ -157,12 +175,18 @@ Future<void> main() async {
       Timer(const Duration(milliseconds: 450), controller.bot.greet);
       Timer(const Duration(milliseconds: 2900), () {
         if (state.view == IslandView.greeting) {
+          if (news.shouldShowOnLaunch) {
+            showNews();
+            return;
+          }
           state.setView(state.defaultView());
           controller.close();
           Timer(const Duration(milliseconds: 1200), controller.hide);
         }
       });
     });
+  } else {
+    Timer(const Duration(milliseconds: 1200), showNews);
   }
 }
 
@@ -181,6 +205,7 @@ class FractusApp extends StatelessWidget {
     required this.memory,
     required this.remote,
     required this.onRemoteChanged,
+    required this.news,
   });
 
   final AppState state;
@@ -195,6 +220,7 @@ class FractusApp extends StatelessWidget {
   final LongTermMemory memory;
   final RemoteServer remote;
   final Future<void> Function() onRemoteChanged;
+  final News news;
 
   @override
   Widget build(BuildContext context) {
@@ -232,6 +258,7 @@ class FractusApp extends StatelessWidget {
           memory: memory,
           remote: remote,
           onRemoteChanged: onRemoteChanged,
+          news: news,
         ),
       ),
     );

@@ -13,6 +13,7 @@ import '../core/models.dart';
 import '../core/theme.dart';
 import '../models.dart';
 import '../native.dart';
+import '../news.dart';
 import '../prefs.dart';
 import '../updater.dart';
 import '../voice.dart';
@@ -1336,6 +1337,25 @@ class _PhoneSettingsState extends State<PhoneSettings> {
           ),
           _section('Mise à jour de l\'appli'),
           _updateRow(),
+          _section('Nouveautés'),
+          AnimatedBuilder(
+            animation: PhoneNews.instance,
+            builder: (context, _) {
+              final n = PhoneNews.instance;
+              final latest = n.notes.isEmpty ? null : n.notes.first;
+              return Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      latest == null ? 'Ce qui a changé, version par version.' : 'Dernière : ${latest.version}${latest.date.isNotEmpty ? ' · ${latest.date}' : ''}',
+                      style: ui(12.5, color: Palette.dim),
+                    ),
+                  ),
+                  IslandButton(label: n.unseen ? 'Voir · nouveau' : 'Voir', compact: true, primary: n.unseen, onTap: () => n.show(context)),
+                ],
+              );
+            },
+          ),
           if (online) ...[
             _section('Chat (Groq) — sur le PC'),
             Row(

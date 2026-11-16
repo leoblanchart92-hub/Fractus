@@ -33,3 +33,5 @@ lib/core/
 lib/companion/
 lib/island/widgets.dart
 lib/island/rich_text.dart
+lib/island/news_list.dart
+assets/CHANGELOG.md

@@ -101,6 +101,11 @@ class Prefs {
 
   static Future<void> setNotifyEnabled(bool v) async => (await SharedPreferences.getInstance()).setBool('bg_notify', v);
 
+  /// La dernière version dont on a montré les nouveautés.
+  static Future<String> seenVersion() async => (await SharedPreferences.getInstance()).getString('seen_version') ?? '';
+
+  static Future<void> setSeenVersion(String v) async => (await SharedPreferences.getInstance()).setString('seen_version', v);
+
   /// Depuis le widget (isolat de fond) : les mêmes infos, lues côté widget.
   static Future<PcConnectionInfo?> loadForWidget() async {
     final host = await HomeWidget.getWidgetData<String>('host') ?? '';

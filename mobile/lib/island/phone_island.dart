@@ -12,6 +12,7 @@ import '../core/anim.dart';
 import '../core/layout.dart';
 import '../core/models.dart';
 import '../core/theme.dart';
+import '../news.dart';
 import '../updater.dart';
 import 'bridge.dart';
 import 'views.dart';
@@ -48,13 +49,22 @@ class _PhoneIslandState extends State<PhoneIsland> {
     super.initState();
     link.addListener(_sync);
     updater.addListener(_sync);
+    PhoneNews.instance.addListener(_sync);
     if (!link.configured) _tab = PhoneView.settings;
+    // Après une mise à jour : les nouveautés, une fois, quand l'écran est posé.
+    PhoneNews.instance.load().then((_) {
+      if (!mounted || !PhoneNews.instance.shouldShowOnLaunch) return;
+      Future.delayed(const Duration(milliseconds: 900), () {
+        if (mounted) PhoneNews.instance.show(context);
+      });
+    });
   }
 
   @override
   void dispose() {
     link.removeListener(_sync);
     updater.removeListener(_sync);
+    PhoneNews.instance.removeListener(_sync);
     super.dispose();
   }
 
@@ -265,7 +275,7 @@ class _PhoneIslandState extends State<PhoneIsland> {
             onTap: () => link.run((c) => c.settings({'muted': !muted})),
           ),
           const SizedBox(width: 4),
-          HeaderTab(icon: Icons.settings_rounded, on: view == PhoneView.settings, size: 14, onTap: () => go(view == PhoneView.settings ? PhoneView.overview : PhoneView.settings)),
+          HeaderTab(icon: Icons.settings_rounded, on: view == PhoneView.settings, size: 14, dot: PhoneNews.instance.unseen && view != PhoneView.settings, onTap: () => go(view == PhoneView.settings ? PhoneView.overview : PhoneView.settings)),
         ],
       ),
     );

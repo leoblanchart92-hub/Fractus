@@ -325,12 +325,15 @@ class _SessionPillState extends State<SessionPill> {
 
 /// Une icône d'en-tête ronde (26 px), allumée quand l'onglet est actif.
 class HeaderTab extends StatefulWidget {
-  const HeaderTab({super.key, required this.icon, required this.onTap, this.on = false, this.tooltip, this.size = 15});
+  const HeaderTab({super.key, required this.icon, required this.onTap, this.on = false, this.tooltip, this.size = 15, this.dot = false});
   final IconData icon;
   final VoidCallback onTap;
   final bool on;
   final String? tooltip;
   final double size;
+
+  /// Un point d'accent en haut à droite (quelque chose de nouveau à voir).
+  final bool dot;
 
   @override
   State<HeaderTab> createState() => _HeaderTabState();
@@ -356,7 +359,27 @@ class _HeaderTabState extends State<HeaderTab> {
             color: widget.on ? Palette.tabOn : (_hover ? const Color(0x14FFFFFF) : Colors.transparent),
             shape: BoxShape.circle,
           ),
-          child: Icon(widget.icon, size: widget.size * touchScale, color: widget.on || _hover ? Palette.ink : Palette.dim2),
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              Icon(widget.icon, size: widget.size * touchScale, color: widget.on || _hover ? Palette.ink : Palette.dim2),
+              if (widget.dot)
+                Positioned(
+                  top: 4 * touchScale,
+                  right: 4 * touchScale,
+                  child: Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: Palette.accent,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Palette.islandTop, width: 1.5),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

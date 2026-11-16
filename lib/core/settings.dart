@@ -31,6 +31,9 @@ class Settings {
   bool launchAtStartup = true;
   /// Chercher les nouvelles versions sur GitHub (au lancement puis toutes les 6 h).
   bool autoUpdate = true;
+
+  /// La dernière version dont on a montré les nouveautés.
+  String seenVersion = '';
   /// Contrôle depuis le téléphone (appli Android) : serveur sur le réseau local.
   bool remoteEnabled = false;
   int remotePort = 7790;
@@ -49,6 +52,7 @@ class Settings {
         'greetOnLaunch': greetOnLaunch,
         'launchAtStartup': launchAtStartup,
         'autoUpdate': autoUpdate,
+        'seenVersion': seenVersion,
         'remoteEnabled': remoteEnabled,
         'remotePort': remotePort,
         'remoteToken': remoteToken,
@@ -72,6 +76,7 @@ class Settings {
     s.greetOnLaunch = j['greetOnLaunch'] != false;
     s.launchAtStartup = j['launchAtStartup'] != false;
     s.autoUpdate = j['autoUpdate'] != false;
+    s.seenVersion = (j['seenVersion'] ?? '').toString();
     s.remoteEnabled = j['remoteEnabled'] == true;
     s.remotePort = (j['remotePort'] is int) ? j['remotePort'] as int : 7790;
     s.remoteToken = (j['remoteToken'] ?? '').toString();

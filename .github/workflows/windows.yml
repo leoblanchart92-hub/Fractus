@@ -118,14 +118,29 @@ jobs:
           path: dist/Fractus-Setup-*.exe
           if-no-files-found: error
 
+      - name: Notes de version (depuis CHANGELOG.md)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          # La section « ## <version> · date » jusqu'à la suivante.
+          awk -v v="$v" '
+            /^## /{ if (on) exit; on = ($2 == v) }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then echo "## $v" > notes.md; echo "(pas de section dans CHANGELOG.md)" >> notes.md; fi
+          { echo; echo "Installateur Windows : \`Fractus-Setup-$v.exe\` · Android : \`Fractus-Android.apk\`"; } >> notes.md
+          cat notes.md
+
       - name: Release (tags v*)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          name: Fractus ${{ github.ref_name }}
+          body_path: notes.md
           files: |
             dist/Fractus-Setup-*.exe
             Fractus-Windows.zip
-          generate_release_notes: true
 
   android:
     name: Build Fractus (Android)

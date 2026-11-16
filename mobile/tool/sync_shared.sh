@@ -5,7 +5,9 @@
 set -e
 cd "$(dirname "$0")/.."
 mkdir -p lib/core lib/companion lib/island
-for f in core/anim.dart core/layout.dart core/theme.dart core/models.dart core/rendezvous.dart core/markdown.dart companion/bot_engine.dart companion/companion_view.dart island/widgets.dart island/rich_text.dart; do
+for f in core/anim.dart core/layout.dart core/theme.dart core/models.dart core/rendezvous.dart core/markdown.dart core/changelog.dart companion/bot_engine.dart companion/companion_view.dart island/widgets.dart island/rich_text.dart island/news_list.dart; do
   cp "../lib/$f" "lib/$f"
 done
+mkdir -p assets
+cp ../CHANGELOG.md assets/CHANGELOG.md
 echo "Interface partagée copiée depuis ../lib"
