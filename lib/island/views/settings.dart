@@ -663,9 +663,25 @@ class _SettingsViewState extends State<SettingsView> {
             setState(() {});
           },
           itemBuilder: (_) => [
+            PopupMenuItem(enabled: false, height: 24, child: Text('Téléchargés', style: ui(10.5, color: Palette.dim3))),
             if (models.isEmpty)
               PopupMenuItem(enabled: false, height: 30, child: Text('Aucun modèle téléchargé', style: ui(12, color: Palette.dim3))),
             for (final m in models) PopupMenuItem(value: m, height: 30, child: Text(m, style: ui(12))),
+            const PopupMenuDivider(height: 6),
+            PopupMenuItem(enabled: false, height: 24, child: Text('Bibliothèque Ollama (téléchargés par Fractus)', style: ui(10.5, color: Palette.dim3))),
+            for (final m in Settings.suggestedModels)
+              if (!models.contains(m[0]))
+                PopupMenuItem(
+                  value: m[0],
+                  height: 34,
+                  child: Row(
+                    children: [
+                      Text(m[0], style: ui(12)),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text('${m[1]} · ${m[2]}', maxLines: 1, overflow: TextOverflow.ellipsis, style: ui(10.5, color: Palette.dim3))),
+                    ],
+                  ),
+                ),
           ],
           child: Container(
             height: 26,

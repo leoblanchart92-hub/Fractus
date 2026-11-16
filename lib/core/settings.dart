@@ -20,7 +20,20 @@ class Settings {
   String chatEngine = 'local';
   /// Le modèle local, au nom de la bibliothèque Ollama (téléchargé par Fractus s'il manque).
   String ollamaModel = defaultOllamaModel;
-  static const String defaultOllamaModel = 'lfm3:1.7b';
+  static const String defaultOllamaModel = 'qwen3:1.7b';
+
+  /// Modèles proposés dans Réglages → Chat (noms officiels de la bibliothèque
+  /// Ollama, ollama.com/library) : nom, description courte, taille approximative.
+  static const List<List<String>> suggestedModels = [
+    ['qwen3:1.7b', 'conseillé : rapide, sait appeler les outils', '1,4 Go'],
+    ['qwen3:4b', 'plus malin, un peu plus lent', '2,6 Go'],
+    ['llama3.2:3b', 'Meta, outils, bon en français', '2,0 Go'],
+    ['qwen2.5-coder:1.5b', 'spécialisé code', '1,0 Go'],
+    ['gemma3:1b', 'tout petit, sans outils', '0,8 Go'],
+  ];
+
+  /// Anciens noms par défaut qui n'existent pas (ou plus) dans la bibliothèque.
+  static bool isRetiredModel(String m) => m.trim().toLowerCase().startsWith('lfm3');
   /// Clé API Groq (gsk_…) pour le chat (vide = chat désactivé).
   String chatApiKey = '';
   /// Modèle Groq (vide = le plus capable disponible sur le compte, choisi automatiquement).
@@ -76,7 +89,7 @@ class Settings {
     // Les anciens réglages (pas de moteur noté) : Groq si une clé est là, sinon Ollama.
     s.chatEngine = engine == 'groq' || engine == 'ollama' || engine == 'local' ? engine : (s.chatApiKey.startsWith('gsk_') ? 'groq' : 'local');
     final om = (j['ollamaModel'] ?? '').toString().trim();
-    s.ollamaModel = om.isEmpty ? defaultOllamaModel : om;
+    s.ollamaModel = om.isEmpty || isRetiredModel(om) ? defaultOllamaModel : om;
     // Un ancien réglage d'un autre fournisseur ne vaut rien chez Groq : on repart à vide.
     if (!s.chatApiKey.startsWith('gsk_')) s.chatApiKey = '';
     // Un modèle d'un autre fournisseur (claude-…, gpt-4o…) n'existe pas chez Groq.

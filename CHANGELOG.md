@@ -4,6 +4,12 @@ Ce fichier est lu par l'application (PC et téléphone) pour la page « Nouveaut
 et sert de notes de version sur GitHub. Une section par version, la plus récente en haut :
 `## <version> · <date>`, puis des puces. Le gras, le code et les listes sont rendus.
 
+## 0.12.2 · 16 novembre 2026
+
+- **Modèle par défaut : `qwen3:1.7b`**, disponible dans la bibliothèque officielle Ollama (ollama.com/library) — téléchargé directement par Fractus, sans installer Ollama. L'ancien `lfm3:1.7b` n'y existait pas : il est remplacé automatiquement.
+- Réglages → Chat : le menu du modèle propose un **catalogue** de modèles de la bibliothèque (qwen3, llama3.2, qwen2.5-coder, gemma3) avec leur taille ; tu peux aussi taper n'importe quel nom de la bibliothèque.
+- Moteur « Dans Fractus » : pas de « réflexion » interne (plus rapide sur CPU), et plus de patience au premier message, le temps que le modèle lise ses consignes.
+
 ## 0.12.1 · 16 novembre 2026
 
 - **Rien à installer** : le moteur « Dans Fractus » fait tourner le modèle lui-même. Fractus télécharge un petit moteur (25 Mo) et le modèle (`lfm3:1.7b` par défaut, au nom de la bibliothèque Ollama) — au premier message, ou d'un clic dans Réglages → Chat. Pas d'Ollama, pas de clé.

@@ -508,7 +508,9 @@ ${tools.sessionsSummary()}''';
         'max_tokens': 2048,
         if (useTools) 'tools': tools.definitions,
         if (useTools) 'tool_choice': 'auto',
-        if (_supportsReasoningFor(model)) 'reasoning_effort': 'medium',
+        if (!isEmbedded && _supportsReasoningFor(model)) 'reasoning_effort': 'medium',
+        // Moteur intégré : pas de « réflexion » (qwen3…), trop lente sur CPU.
+        if (isEmbedded) 'chat_template_kwargs': {'enable_thinking': false},
       };
       final req = http.Request('POST', Uri.parse('$baseUrl/chat/completions'))
         ..headers.addAll(_headers)
@@ -550,7 +552,7 @@ ${tools.sessionsSummary()}''';
           }
           throw Exception(_errorTextRaw(res.statusCode, text));
         }
-        return await _readStream(res, onDelta);
+        return await _readStream(res, onDelta, idle: Duration(seconds: isEmbedded ? 300 : 90));
       } finally {
         client.close();
       }
@@ -668,11 +670,20 @@ ${tools.sessionsSummary()}''';
     return {};
   }
 
-  Future<_Turn> _readStream(http.StreamedResponse res, void Function(String) onDelta) async {
+  /// Retire une « réflexion » <think>…</think> qu'un modèle local laisserait passer.
+  static String stripThink(String s) {
+    if (!s.contains('<think>')) return s;
+    var out = s.replaceAll(RegExp(r'<think>[\s\S]*?</think>\s*'), '');
+    final i = out.indexOf('<think>');
+    if (i >= 0) out = out.substring(0, i);
+    return out.trimLeft();
+  }
+
+  Future<_Turn> _readStream(http.StreamedResponse res, void Function(String) onDelta, {Duration idle = const Duration(seconds: 90)}) async {
     {
       final turn = _Turn();
       final buffer = StringBuffer();
-      await for (final line in res.stream.transform(utf8.decoder).transform(const LineSplitter()).timeout(const Duration(seconds: 90))) {
+      await for (final line in res.stream.transform(utf8.decoder).transform(const LineSplitter()).timeout(idle)) {
         if (!line.startsWith('data:')) continue;
         final payload = line.substring(5).trim();
         if (payload.isEmpty || payload == '[DONE]') continue;
@@ -689,7 +700,7 @@ ${tools.sessionsSummary()}''';
         final content = delta['content'];
         if (content is String && content.isNotEmpty) {
           buffer.write(content);
-          onDelta(buffer.toString());
+          onDelta(stripThink(buffer.toString()));
         }
         final tcs = delta['tool_calls'];
         if (tcs is List) {
@@ -708,7 +719,7 @@ ${tools.sessionsSummary()}''';
           }
         }
       }
-      turn.content = buffer.toString();
+      turn.content = stripThink(buffer.toString());
       turn.toolCalls.removeWhere((c) => c.name.isEmpty);
       for (var i = 0; i < turn.toolCalls.length; i++) {
         if (turn.toolCalls[i].id.isEmpty) turn.toolCalls[i].id = 'call_$i';

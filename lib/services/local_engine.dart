@@ -2,7 +2,7 @@
 //   - le moteur : llama-server (llama.cpp, build CPU Windows, ~25 Mo) téléchargé
 //     depuis GitHub dans %APPDATA%\fractus\engine\ ;
 //   - le modèle : le fichier GGUF récupéré directement sur la bibliothèque
-//     d'Ollama (registry.ollama.ai, les mêmes noms : « lfm3:1.7b »), vérifié
+//     d'Ollama (registry.ollama.ai, les mêmes noms : « qwen3:1.7b »), vérifié
 //     par son empreinte SHA-256, rangé dans %APPDATA%\fractus\models\ ;
 //   - lancé en enfant de Fractus sur 127.0.0.1:11435 (API compatible OpenAI,
 //     outils compris grâce à --jinja), arrêté avec lui.
@@ -83,7 +83,7 @@ class LocalEngineService extends ChangeNotifier {
     return null;
   }
 
-  /// « lfm3:1.7b » → « lfm3-1.7b.gguf » ; « user/repo:tag » → « user_repo-tag.gguf ».
+  /// « qwen3:1.7b » → « qwen3-1.7b.gguf » ; « user/repo:tag » → « user_repo-tag.gguf ».
   static String fileNameFor(String model) {
     final m = normalize(model);
     return '${m.replaceAll('/', '_').replaceAll(':', '-')}.gguf';
