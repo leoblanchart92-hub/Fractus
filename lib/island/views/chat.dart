@@ -11,6 +11,7 @@ import '../../core/theme.dart';
 import '../../services/chat_runner.dart';
 import '../../services/chat_service.dart';
 import '../controller.dart';
+import '../rich_text.dart';
 
 class ChatView extends StatefulWidget {
   const ChatView({super.key, required this.state, required this.controller, required this.chat});
@@ -94,7 +95,7 @@ class _ChatViewState extends State<ChatView> {
                     controller: _scroll,
                     padding: const EdgeInsets.only(bottom: 8),
                     itemCount: msgs.length,
-                    itemBuilder: (_, i) => _Bubble(msgs[i]),
+                    itemBuilder: (_, i) => _Bubble(msgs[i], showTime: i == msgs.length - 1 || msgs[i + 1].role != msgs[i].role),
                   ),
           ),
           if (widget.state.pendingFiles.isNotEmpty)
@@ -220,39 +221,114 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-class _Bubble extends StatelessWidget {
-  const _Bubble(this.m);
+class _Bubble extends StatefulWidget {
+  const _Bubble(this.m, {this.showTime = false});
   final ChatMessage m;
+  final bool showTime;
+
+  @override
+  State<_Bubble> createState() => _BubbleState();
+}
+
+class _BubbleState extends State<_Bubble> {
+  bool _hover = false;
+  bool _copied = false;
+
+  void _copy() {
+    Clipboard.setData(ClipboardData(text: widget.m.text));
+    setState(() => _copied = true);
+    Future.delayed(const Duration(milliseconds: 1400), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    final m = widget.m;
     final user = m.role == 'user';
-    return Align(
-      alignment: user ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(top: 6),
-        constraints: const BoxConstraints(maxWidth: 420),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          color: user ? Palette.tabOn : Palette.card,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Palette.hairline),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SelectableText(m.text, style: ui(12.5, height: 1.35)),
-            if (m.files.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: [for (final f in m.files) _FileChip(name: f, kind: Attachment.kindOf(f))],
+    final typing = !user && m.text == '…';
+    final status = !user && m.text.startsWith('⟡ ');
+    Widget body;
+    if (typing) {
+      body = const TypingDots();
+    } else if (status) {
+      body = TypingDots(label: m.text.substring(2).replaceAll(RegExp(r'…$'), ''));
+    } else {
+      body = MarkdownBody(m.text, selectable: true);
+    }
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Column(
+        crossAxisAlignment: user ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: user ? MainAxisAlignment.end : MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (user && !typing) _copyButton(visible: _hover),
+              Flexible(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 6),
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: typing || status ? 9 : 7),
+                  decoration: BoxDecoration(
+                    color: user ? Palette.tabOn : Palette.card,
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(14),
+                      topRight: const Radius.circular(14),
+                      bottomLeft: Radius.circular(user ? 14 : 4),
+                      bottomRight: Radius.circular(user ? 4 : 14),
+                    ),
+                    border: Border.all(color: Palette.hairline),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      body,
+                      if (m.files.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children: [for (final f in m.files) _FileChip(name: f, kind: Attachment.kindOf(f))],
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
-          ],
+              if (!user && !typing && !status) _copyButton(visible: _hover),
+            ],
+          ),
+          if (widget.showTime && !typing && !status)
+            Padding(
+              padding: const EdgeInsets.only(top: 2, left: 6, right: 6),
+              child: Text(hourMinute(m.at), style: ui(9.5, color: Palette.dim4)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Le petit « copier » qui apparaît au survol, à côté de la bulle.
+  Widget _copyButton({required bool visible}) {
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 120),
+      opacity: visible || _copied ? 1 : 0,
+      child: Tooltip(
+        message: 'Copier le message',
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: _copy,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
+              child: Icon(_copied ? Icons.check_rounded : Icons.copy_rounded, size: 13, color: _copied ? Palette.green2 : Palette.dim3),
+            ),
+          ),
         ),
       ),
     );
@@ -357,33 +433,43 @@ class _Field extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 42,
-      padding: const EdgeInsets.only(left: 14, right: 6),
+      constraints: const BoxConstraints(minHeight: 42),
+      padding: const EdgeInsets.only(left: 14, right: 6, top: 4, bottom: 4),
       decoration: BoxDecoration(
         color: Palette.card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0x14FFFFFF)),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Expanded(
-            child: CallbackShortcuts(
-              bindings: {
-                const SingleActivator(LogicalKeyboardKey.escape): onEscape,
-              },
-              child: TextField(
-                controller: controller,
-                focusNode: focus,
-                style: ui(13),
-                cursorColor: Palette.ink,
-                decoration: InputDecoration(
-                  isDense: true,
-                  border: InputBorder.none,
-                  hintText: hasFiles ? 'Qu\'est-ce que j\'en fais ? (Entrée pour simplement regarder)' : 'Écris à Fractus…',
-                  hintStyle: ui(13, color: Palette.dim3),
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: CallbackShortcuts(
+                bindings: {
+                  const SingleActivator(LogicalKeyboardKey.escape): onEscape,
+                  // Entrée envoie ; Maj+Entrée va à la ligne (comportement natif).
+                  const SingleActivator(LogicalKeyboardKey.enter): onSend,
+                  const SingleActivator(LogicalKeyboardKey.numpadEnter): onSend,
+                },
+                child: TextField(
+                  controller: controller,
+                  focusNode: focus,
+                  style: ui(13, height: 1.3),
+                  cursorColor: Palette.ink,
+                  minLines: 1,
+                  maxLines: 5,
+                  keyboardType: TextInputType.multiline,
+                  textInputAction: TextInputAction.newline,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    isCollapsed: true,
+                    border: InputBorder.none,
+                    hintText: hasFiles ? 'Qu\'est-ce que j\'en fais ? (Entrée pour simplement regarder)' : 'Écris à Fractus… (Maj+Entrée : à la ligne)',
+                    hintStyle: ui(13, color: Palette.dim3),
+                  ),
                 ),
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => onSend(),
               ),
             ),
           ),

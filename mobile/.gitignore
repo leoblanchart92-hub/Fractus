@@ -32,3 +32,4 @@ android/app/src/main/res/values/*
 lib/core/
 lib/companion/
 lib/island/widgets.dart
+lib/island/rich_text.dart

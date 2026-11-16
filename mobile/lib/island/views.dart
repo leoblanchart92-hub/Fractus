@@ -3,7 +3,6 @@
 // journal, réglages), nourries par l'état que le PC envoie.
 
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -19,6 +18,7 @@ import '../updater.dart';
 import '../voice.dart';
 import 'bridge.dart';
 import 'qr_scan.dart';
+import 'rich_text.dart';
 import 'widgets.dart';
 
 // En plein écran, Fractus est au-dessus des cartes : pas de marge à gauche.
@@ -525,7 +525,7 @@ class _PhoneChatState extends State<PhoneChat> {
                 : ListView.builder(
                     controller: _scroll,
                     padding: const EdgeInsets.only(bottom: 8),
-                    itemCount: msgs.length + (busy ? 1 : 0),
+                    itemCount: msgs.length + (busy && msgs.last.role == 'user' ? 1 : 0),
                     itemBuilder: (_, i) => i < msgs.length
                         ? _Bubble(msgs[i], showTime: i == msgs.length - 1 || msgs[i + 1].role != msgs[i].role)
                         : const _Typing(),
@@ -552,22 +552,10 @@ class _PhoneChatState extends State<PhoneChat> {
   }
 }
 
-/// « Fractus écrit… » : trois points qui respirent, pendant qu'il répond.
-class _Typing extends StatefulWidget {
-  const _Typing();
-
-  @override
-  State<_Typing> createState() => _TypingState();
-}
-
-class _TypingState extends State<_Typing> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))..repeat();
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
+/// « Fractus écrit… » : la bulle aux trois points qui respirent, pendant qu'il répond.
+class _Typing extends StatelessWidget {
+  const _Typing({this.label});
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
@@ -577,24 +565,7 @@ class _TypingState extends State<_Typing> with SingleTickerProviderStateMixin {
         margin: const EdgeInsets.only(top: 6),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         decoration: BoxDecoration(color: Palette.card, borderRadius: BorderRadius.circular(14), border: Border.all(color: Palette.hairline)),
-        child: AnimatedBuilder(
-          animation: _c,
-          builder: (_, __) => Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (var i = 0; i < 3; i++)
-                Container(
-                  width: 6,
-                  height: 6,
-                  margin: EdgeInsets.only(right: i < 2 ? 4 : 0),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Palette.accent.withValues(alpha: 0.35 + 0.65 * (0.5 + 0.5 * math.sin((_c.value * 2 * math.pi) - i * 1.1))),
-                  ),
-                ),
-            ],
-          ),
-        ),
+        child: TypingDots(label: label),
       ),
     );
   }
@@ -679,6 +650,8 @@ class _Bubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = m.role == 'user';
+    if (!user && m.text == '…') return const _Typing();
+    if (!user && m.text.startsWith('⟡ ')) return _Typing(label: m.text.substring(2).replaceAll(RegExp(r'…$'), ''));
     return Column(
       crossAxisAlignment: user ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: [
@@ -711,7 +684,7 @@ class _Bubble extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(m.text, style: ui(12.5, height: 1.35)),
+                MarkdownBody(m.text),
                 if (m.files.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
@@ -746,23 +719,29 @@ class _Field extends StatelessWidget {
 
   Widget _build(BuildContext context) {
     return Container(
-      height: 42,
-      padding: const EdgeInsets.only(left: 14, right: 6),
+      constraints: const BoxConstraints(minHeight: 42),
+      padding: const EdgeInsets.only(left: 14, right: 6, top: 4, bottom: 4),
       decoration: BoxDecoration(
         color: Palette.card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Voice.instance.listening ? Palette.pink.withValues(alpha: 0.6) : const Color(0x14FFFFFF)),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Expanded(
             child: TextField(
               controller: controller,
               focusNode: focus,
-              style: ui(13),
+              style: ui(13, height: 1.3),
               cursorColor: Palette.ink,
+              minLines: 1,
+              maxLines: 4,
+              keyboardType: TextInputType.multiline,
               decoration: InputDecoration(
                 isDense: true,
+                isCollapsed: true,
+                contentPadding: const EdgeInsets.only(bottom: 6, top: 2),
                 border: InputBorder.none,
                 hintText: Voice.instance.listening ? 'Je t\'écoute…' : hint,
                 hintStyle: ui(13, color: Voice.instance.listening ? Palette.pink : Palette.dim3),
