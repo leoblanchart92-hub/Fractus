@@ -1,5 +1,6 @@
 // Les réglages, dans l'île : affichage, son, hooks, chat, et la sortie.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -7,11 +8,13 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/layout.dart';
+import '../../core/models.dart';
 import '../../core/settings.dart';
 import '../../core/state.dart';
 import '../../core/theme.dart';
 import '../../services/chat_service.dart';
 import '../../services/memory.dart';
+import '../../services/ollama_service.dart';
 import '../../services/remote_server.dart';
 import '../../services/tunnel_service.dart';
 import '../../services/update_service.dart';
