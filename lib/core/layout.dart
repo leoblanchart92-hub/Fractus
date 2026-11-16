@@ -72,6 +72,9 @@ const double expandedCorner = 22;
 const double wakeStripW = 240;
 const double wakeStripH = 6;
 
+/// Hauteur de la bande, sous le bord haut, où un fichier glissé réveille l'île.
+const double dropBandH = 120;
+
 const Map<IslandView, ViewLayout> viewLayouts = {
   IslandView.overview: ViewLayout(height: 160, botX: 68, botDiameter: 58, agentMode: AgentLayoutMode.pills),
   IslandView.empty: ViewLayout(height: 160, botX: 70, botDiameter: 62, agentMode: AgentLayoutMode.none),

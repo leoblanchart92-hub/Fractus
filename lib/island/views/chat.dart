@@ -84,7 +84,7 @@ class _ChatViewState extends State<ChatView> {
                       padding: const EdgeInsets.only(bottom: 8, left: 6),
                       child: Text(
                         widget.chat.configured
-                            ? 'Demande-moi n\'importe quoi : je pilote ton PC, je code, et je retiens ce que tu me dis de retenir.'
+                            ? 'Demande-moi n\'importe quoi : je pilote ton PC, je code, et je retiens ce que tu me dis de retenir. Glisse-moi un fichier (ou le trombone) et j\'y jette un œil.'
                             : 'Ajoute ta clé Groq dans les réglages pour discuter.',
                         style: ui(12, color: Palette.dim3),
                       ),
@@ -105,6 +105,10 @@ class _ChatViewState extends State<ChatView> {
             busy: widget.state.chatBusy,
             hasFiles: widget.state.pendingFiles.isNotEmpty,
             onSend: _send,
+            onAttach: () async {
+              await widget.controller.pickFiles();
+              _focus.requestFocus();
+            },
             onEscape: () {
               _focus.unfocus();
               widget.controller.close();
@@ -339,12 +343,14 @@ class _Field extends StatelessWidget {
     required this.busy,
     required this.onSend,
     required this.onEscape,
+    required this.onAttach,
     this.hasFiles = false,
   });
   final TextEditingController controller;
   final FocusNode focus;
   final bool busy;
   final bool hasFiles;
+  final VoidCallback onAttach;
   final VoidCallback onSend;
   final VoidCallback onEscape;
 
@@ -381,7 +387,27 @@ class _Field extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 2),
+          Tooltip(
+            message: 'Joindre des fichiers (ou glisse-les sur l\'île)',
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                onTap: onAttach,
+                child: Container(
+                  width: 30,
+                  height: 30,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: hasFiles ? Palette.accent.withValues(alpha: 0.14) : Colors.transparent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.attach_file_rounded, size: 17, color: hasFiles ? Palette.accent : Palette.dim),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
           MouseRegion(
             cursor: SystemMouseCursors.click,
             child: GestureDetector(

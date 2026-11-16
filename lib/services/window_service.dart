@@ -14,6 +14,7 @@ import 'package:window_manager/window_manager.dart';
 import '../core/layout.dart';
 import '../core/state.dart';
 import '../island/controller.dart';
+import 'win32_input.dart';
 
 class WindowService {
   WindowService(this.state, this.controller);
@@ -105,7 +106,16 @@ class WindowService {
       final by = rect.top + bp.cy;
       controller.look((local.dx - bx) / 220, (local.dy - by) / 160);
 
-      await _setIgnore(!inside);
+      // Un fichier qu'on glisse (bouton tenu) au-dessus de la fenêtre : on
+      // redevient une cible, pour que Windows nous propose le dépôt même si
+      // l'île est repliée. Le DragEnter qui suit l'ouvre sur le chat.
+      final dragOver = !inside &&
+          Win32Input.mouseButtonHeld() &&
+          local.dx >= 0 &&
+          local.dx < panelW &&
+          local.dy >= 0 &&
+          local.dy < (state.mode == IslandMode.hidden ? dropBandH : panelH);
+      await _setIgnore(!inside && !dragOver);
     } catch (_) {
       // Pas de curseur global (session verrouillée…) : on attend le prochain tour.
     } finally {

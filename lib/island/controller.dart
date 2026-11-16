@@ -13,6 +13,7 @@ import '../core/state.dart';
 import '../companion/bot_engine.dart';
 import '../services/attachment_reader.dart';
 import '../services/sound.dart';
+import '../services/win32_input.dart';
 
 class IslandController extends ChangeNotifier {
   IslandController(this.state) : bot = BotEngine() {
@@ -184,6 +185,27 @@ class IslandController extends ChangeNotifier {
   Future<void> dropFiles(List<String> paths) async {
     _dragBounce?.cancel();
     state.setDragging(false);
+    await attachFiles(paths);
+  }
+
+  /// Le trombone du chat : la boîte « Ouvrir » de Windows, puis les mêmes pastilles.
+  Future<void> pickFiles() async {
+    state.pinned = true; // la boîte prend le focus : l'île ne doit pas se replier
+    try {
+      final paths = await Win32Input.pickFiles();
+      if (paths.isEmpty) {
+        bot.triggerEmote(BotEmote.wink, duration: 0.8);
+        return;
+      }
+      await attachFiles(paths);
+    } finally {
+      state.pinned = false;
+      open(IslandView.prompt);
+      onWake?.call();
+    }
+  }
+
+  Future<void> attachFiles(List<String> paths) async {
     final files = <Attachment>[];
     for (final p in paths.take(8)) {
       if (p.trim().isEmpty) continue;

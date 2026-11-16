@@ -1,7 +1,7 @@
 name: fractus
 description: "Fractus — un petit compagnon en haut de l'écran qui surveille vos agents IA (interface reprise de Coucou)."
 publish_to: "none"
-version: 0.11.1+22
+version: 0.11.2+23
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -31,6 +31,8 @@ dependencies:
   package_info_plus: ^8.0.0
   # Glisser des fichiers de l'Explorateur sur l'île (Fractus les lit).
   desktop_drop: ">=0.6.0 <0.9.0"
+  # Deux appels Win32 (bouton de souris tenu, boîte « Ouvrir ») en dart:ffi.
+  ffi: ^2.1.0
 
 dev_dependencies:
   flutter_test:
