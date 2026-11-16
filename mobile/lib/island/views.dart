@@ -1359,7 +1359,7 @@ class _PhoneSettingsState extends State<PhoneSettings> {
           if (online) ...[
             _section('Chat — sur le PC'),
             if (st.local) ...[
-              Text('Moteur : Ollama, sur le PC · ${st.effectiveModel}', maxLines: 1, overflow: TextOverflow.ellipsis, style: ui(12.5)),
+              Text('Moteur : ${st.engine == 'ollama' ? 'Ollama' : 'dans Fractus'}, sur le PC · ${st.effectiveModel}', maxLines: 1, overflow: TextOverflow.ellipsis, style: ui(12.5)),
               if (st.engineStatus.isNotEmpty) Text(st.engineStatus, maxLines: 2, overflow: TextOverflow.ellipsis, style: ui(10.5, color: Palette.dim4)),
             ] else ...[
               Row(

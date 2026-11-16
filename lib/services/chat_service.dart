@@ -16,6 +16,7 @@ import 'package:http/http.dart' as http;
 import '../core/models.dart';
 import '../core/settings.dart';
 import 'chat_tools.dart';
+import 'local_engine.dart';
 import 'ollama_service.dart';
 
 class GroqModel {
@@ -31,22 +32,31 @@ class ChatService {
     required this.model,
     required this.tools,
     this.webSearch = false,
-    this.engine = 'ollama',
+    this.engine = 'local',
     this.ollamaModel = Settings.defaultOllamaModel,
     this.ollama,
+    this.local,
   }) {
     tools.vision = describeImage;
   }
 
-  /// « ollama » : un modèle sur ce PC ; « groq » : dans le cloud avec une clé.
+  /// « local » : un modèle dans Fractus ; « ollama » : Ollama sur ce PC ; « groq » : cloud avec une clé.
   String engine;
   String ollamaModel;
 
-  /// Le moteur local (installation, lancement, modèles) ; null dans les tests.
+  /// Ollama (installation, lancement, modèles) ; null dans les tests.
   OllamaService? ollama;
 
+  /// Le moteur intégré (llama-server + GGUF) ; null dans les tests.
+  LocalEngineService? local;
+
   bool get isLocal => engine != 'groq';
-  String get engineName => isLocal ? 'Ollama' : 'Groq';
+  bool get isOllama => engine == 'ollama';
+  bool get isEmbedded => isLocal && !isOllama;
+  String get engineName => isEmbedded ? 'le moteur local' : (isOllama ? 'Ollama' : 'Groq');
+
+  /// Une ligne d'état du moteur en cours (réglages, téléphone).
+  String get engineStatus => isEmbedded ? (local?.statusLine ?? '') : (isOllama ? (ollama?.statusLine ?? '') : 'Groq');
 
   /// Modèles qui voient les images, du meilleur au plus léger.
   static const List<String> visionPreferred = [
@@ -55,7 +65,7 @@ class ChatService {
   ];
 
   static const String groqUrl = 'https://api.groq.com/openai/v1';
-  String get baseUrl => isLocal ? '${OllamaService.host}/v1' : groqUrl;
+  String get baseUrl => isEmbedded ? '${LocalEngineService.host}/v1' : (isOllama ? '${OllamaService.host}/v1' : groqUrl);
 
   /// Les modèles qu'on préfère, du plus capable au plus modeste. Le premier
   /// disponible sur le compte est retenu quand le réglage « Modèle » est vide.
@@ -97,7 +107,8 @@ class ChatService {
 
   /// Décrit une image (JPEG par défaut, sinon `mime`) avec un modèle vision de Groq.
   Future<String> describeImage(List<int> jpeg, String prompt, {String mime = 'image/jpeg'}) async {
-    if (isLocal) return _describeImageLocal(jpeg, prompt);
+    if (isEmbedded) throw Exception('le moteur local ne regarde pas encore les images — passe par Ollama (modèle vision) ou Groq le temps de cette question');
+    if (isOllama) return _describeImageLocal(jpeg, prompt);
     if (!configured) throw Exception('clé Groq manquante');
     if (models.isEmpty) {
       try {
@@ -307,7 +318,10 @@ ${tools.sessionsSummary()}''';
     void Function(String status)? onStatus,
   }) async {
     if (!configured) return 'Ajoute ta clé Groq dans Réglages → Chat (gratuite sur console.groq.com).';
-    if (isLocal) {
+    if (isEmbedded) {
+      final notReady = await _embeddedNotReady(onStatus);
+      if (notReady != null) return notReady;
+    } else if (isOllama) {
       final notReady = await _localNotReady(onStatus);
       if (notReady != null) return notReady;
     }
@@ -386,13 +400,27 @@ ${tools.sessionsSummary()}''';
       tools.end('$engineName ne répond pas.', error: true);
       return isLocal
           ? 'Ollama ne répond pas (délai dépassé). Le modèle est peut-être trop lourd pour ce PC : essaie un modèle plus petit dans Réglages → Chat.'
-          : 'Groq ne répond pas (délai dépassé).';
+          : '$engineName ne répond pas (délai dépassé).';
     } catch (e) {
       final msg = e.toString().replaceFirst('Exception: ', '');
       final text = answer.trim().isNotEmpty ? answer.trim() : 'Impossible de joindre $engineName : $msg';
       tools.end(text, error: answer.trim().isEmpty);
       return text;
     }
+  }
+
+  /// Le moteur intégré se prépare tout seul (moteur, modèle, lancement) la
+  /// première fois ; le chat montre la progression. Null quand tout est prêt.
+  Future<String?> _embeddedNotReady(void Function(String status)? onStatus) async {
+    final l = local;
+    if (l == null) return null;
+    final m = effectiveModel;
+    if (l.ready && l.running == LocalEngineService.normalize(m)) return null;
+    if (l.busy) return 'Le moteur local se prépare (${l.statusLine}). Réessaie dans un instant.';
+    onStatus?.call('je prépare le moteur local');
+    final ok = await l.ensure(m, onStatus: onStatus);
+    if (ok) return null;
+    return 'Moteur local : ${l.error ?? l.statusLine} — voir Réglages → Chat.';
   }
 
   /// Ollama doit tourner et avoir le modèle ; sinon on essaie de le lancer, et
@@ -467,7 +495,7 @@ ${tools.sessionsSummary()}''';
     required void Function(String) onDelta,
     void Function(String status)? onStatus,
   }) async {
-    if (isLocal) return _streamOnceOllama(messages, useTools: useTools, onDelta: onDelta);
+    if (isOllama) return _streamOnceOllama(messages, useTools: useTools, onDelta: onDelta);
     var model = _modelNow();
     var attempt = 0;
     while (true) {
@@ -487,7 +515,13 @@ ${tools.sessionsSummary()}''';
         ..body = jsonEncode(body);
       final client = http.Client();
       try {
-        final res = await client.send(req).timeout(const Duration(seconds: 45));
+        final http.StreamedResponse res;
+        try {
+          res = await client.send(req).timeout(Duration(seconds: isEmbedded ? 180 : 45));
+        } on SocketException {
+          if (isEmbedded) throw Exception('le moteur local ne répond pas (Réglages → Chat → Relancer).');
+          rethrow;
+        }
         if (res.statusCode == 429 && attempt <= 4) {
           final text = await res.stream.bytesToString();
           final wait = _retryAfter(res.headers, text);

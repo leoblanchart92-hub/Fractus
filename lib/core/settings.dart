@@ -15,10 +15,10 @@ class Settings {
   bool muted = false;
   /// Port local du serveur de hooks (l'agent y poste ses événements).
   int hookPort = 7788;
-  /// Le moteur du chat : « ollama » (un modèle sur ce PC, gratuit, hors ligne)
-  /// ou « groq » (dans le cloud, avec une clé).
-  String chatEngine = 'ollama';
-  /// Le modèle Ollama (téléchargé par Fractus s'il manque).
+  /// Le moteur du chat : « local » (un modèle qui tourne dans Fractus, rien à
+  /// installer), « ollama » (Ollama déjà sur ce PC) ou « groq » (cloud, avec une clé).
+  String chatEngine = 'local';
+  /// Le modèle local, au nom de la bibliothèque Ollama (téléchargé par Fractus s'il manque).
   String ollamaModel = defaultOllamaModel;
   static const String defaultOllamaModel = 'lfm3:1.7b';
   /// Clé API Groq (gsk_…) pour le chat (vide = chat désactivé).
@@ -74,7 +74,7 @@ class Settings {
     s.chatApiKey = (j['chatApiKey'] ?? '') as String;
     final engine = (j['chatEngine'] ?? '').toString();
     // Les anciens réglages (pas de moteur noté) : Groq si une clé est là, sinon Ollama.
-    s.chatEngine = engine == 'groq' || engine == 'ollama' ? engine : (s.chatApiKey.startsWith('gsk_') ? 'groq' : 'ollama');
+    s.chatEngine = engine == 'groq' || engine == 'ollama' || engine == 'local' ? engine : (s.chatApiKey.startsWith('gsk_') ? 'groq' : 'local');
     final om = (j['ollamaModel'] ?? '').toString().trim();
     s.ollamaModel = om.isEmpty ? defaultOllamaModel : om;
     // Un ancien réglage d'un autre fournisseur ne vaut rien chez Groq : on repart à vide.

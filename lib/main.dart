@@ -17,6 +17,7 @@ import 'services/conversation_store.dart';
 import 'services/hook_server.dart';
 import 'services/journal.dart';
 import 'services/memory.dart';
+import 'services/local_engine.dart';
 import 'services/ollama_service.dart';
 import 'services/news.dart';
 import 'services/remote_server.dart';
@@ -51,6 +52,8 @@ Future<void> main() async {
   final hooks = HookServer(controller);
   // Le moteur local du chat (Ollama) : installé, lancé et alimenté en modèles par Fractus.
   final ollama = OllamaService();
+  // Le moteur intégré : llama-server + le modèle, téléchargés par Fractus, rien à installer.
+  final local = LocalEngineService();
   final chat = ChatService(
     apiKey: settings.chatApiKey,
     model: settings.chatModel,
@@ -58,6 +61,7 @@ Future<void> main() async {
     engine: settings.chatEngine,
     ollamaModel: settings.ollamaModel,
     ollama: ollama,
+    local: local,
     tools: ChatTools(state, controller: controller)
       ..workspace = settings.chatWorkspace
       ..journal = journal
@@ -72,6 +76,7 @@ Future<void> main() async {
     chat.tools.workspace = state.settings.chatWorkspace;
   });
   ollama.addListener(state.touch);
+  local.addListener(state.touch);
   final startup = StartupService();
   final updates = UpdateService(autoCheck: settings.autoUpdate);
   // Le téléphone : serveur sur le réseau local, protégé par le code d'appairage.
@@ -108,6 +113,7 @@ Future<void> main() async {
     await conversations.flush();
     await journal.flush();
     await tunnel.stop();
+    await local.stop();
     await remote.stop();
     await hooks.stop();
     await tray.stop();
@@ -162,10 +168,21 @@ Future<void> main() async {
   await startup.apply(settings.launchAtStartup);
   await updates.init();
   await news.load(updates.currentVersion);
-  // Ollama : on regarde s'il est là, et on le réveille s'il dort (sans rien télécharger tout seul).
-  if (settings.chatEngine != 'groq') {
+  // Le moteur du chat : le local se lance s'il est déjà téléchargé (sinon il se
+  // préparera au premier message) ; Ollama est réveillé s'il dort.
+  if (settings.chatEngine == 'ollama') {
     unawaited(ollama.refresh().then((_) async {
       if (ollama.status == OllamaStatus.stopped) await ollama.start();
+      if (ollama.status == OllamaStatus.absent) {
+        // Réglé sur Ollama sans Ollama (ancien défaut) : le moteur intégré prend la main.
+        settings.chatEngine = 'local';
+        state.saveSettingsSoon();
+      }
+    }));
+  }
+  if (settings.chatEngine == 'local') {
+    unawaited(local.refresh(settings.ollamaModel).then((_) async {
+      if (local.status == LocalStatus.unknown) await local.start(settings.ollamaModel);
     }));
   }
   state.touch();

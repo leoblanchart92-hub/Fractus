@@ -372,7 +372,7 @@ class RemoteServer {
         'alwaysAllow': state.settings.alwaysAllow.toList()..sort(),
         'configured': chat.configured,
         'engine': chat.engine,
-        'engineStatus': chat.isLocal ? (chat.ollama?.statusLine ?? '') : 'Groq',
+        'engineStatus': chat.engineStatus,
         'muted': state.settings.muted,
       },
       'pending': a == null

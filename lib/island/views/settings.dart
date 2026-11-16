@@ -13,6 +13,7 @@ import '../../core/settings.dart';
 import '../../core/state.dart';
 import '../../core/theme.dart';
 import '../../services/chat_service.dart';
+import '../../services/local_engine.dart';
 import '../../services/memory.dart';
 import '../../services/ollama_service.dart';
 import '../../services/remote_server.dart';
@@ -233,13 +234,15 @@ class _SettingsViewState extends State<SettingsView> {
             _section('Chat — le cerveau de Fractus'),
             Row(
               children: [
-                _engineChip('Sur ce PC (Ollama)', 'ollama', s),
+                _engineChip('Dans Fractus', 'local', s),
                 const SizedBox(width: 6),
-                _engineChip('Dans le cloud (Groq)', 'groq', s),
+                _engineChip('Ollama', 'ollama', s),
+                const SizedBox(width: 6),
+                _engineChip('Cloud (Groq)', 'groq', s),
               ],
             ),
             const SizedBox(height: 4),
-            if (s.chatEngine != 'groq') ..._ollamaPanel(s) else ..._groqPanel(s),
+            if (s.chatEngine == 'groq') ..._groqPanel(s) else if (s.chatEngine == 'ollama') ..._ollamaPanel(s) else ..._embeddedPanel(s),
             const SizedBox(height: 4),
             Row(
               children: [
@@ -257,8 +260,10 @@ class _SettingsViewState extends State<SettingsView> {
               s.chatEngine == 'groq'
                   ? 'Fractus agit comme Claude Code : il lit, cherche, écrit, modifie et lance des commandes dans le dossier de travail — '
                       'chaque action passe par la carte Autoriser / Refuser / Toujours. La clé reste sur cette machine.'
-                  : 'Tout tourne sur ce PC : rien ne part sur Internet, pas de clé, pas de quota. Un petit modèle est moins malin qu\'un gros du cloud : '
-                      'pour les tâches difficiles, tu peux basculer sur Groq le temps d\'une question.',
+                  : s.chatEngine == 'ollama'
+                      ? 'Ollama tourne sur ce PC : rien ne part sur Internet, pas de clé, pas de quota. Pour une question difficile, Groq reste à un clic.'
+                      : 'Rien à installer : Fractus télécharge un petit moteur (25 Mo) et le modèle, et les fait tourner lui-même. '
+                          'Rien ne part sur Internet ensuite. Un petit modèle est moins malin qu\'un gros du cloud : pour les tâches difficiles, Groq reste à un clic.',
               style: ui(11, color: Palette.dim3),
             ),
             _section('Mémoire et historique'),
@@ -528,7 +533,7 @@ class _SettingsViewState extends State<SettingsView> {
   // ── Le moteur ───────────────────────────────────────────────────────────────
 
   Widget _engineChip(String label, String value, Settings s) {
-    final on = (s.chatEngine == 'groq') == (value == 'groq');
+    final on = s.chatEngine == value;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
@@ -538,6 +543,8 @@ class _SettingsViewState extends State<SettingsView> {
           s.chatEngine = value;
           widget.state.saveSettingsSoon();
           if (value == 'ollama') unawaited(_ollamaRefresh());
+          if (value == 'local') unawaited(_embeddedRefresh());
+          if (value != 'local') unawaited(widget.chat.local?.stop() ?? Future.value());
           setState(() {});
         },
         child: AnimatedContainer(
@@ -561,6 +568,139 @@ class _SettingsViewState extends State<SettingsView> {
     if (o == null) return;
     await o.refresh();
     if (o.status == OllamaStatus.stopped) await o.start();
+  }
+
+  // ── Le moteur intégré ──────────────────────────────────────────────────────
+
+  Future<void> _embeddedRefresh() async {
+    final l = widget.chat.local;
+    if (l == null) return;
+    final m = widget.chat.effectiveModel;
+    await l.refresh(m);
+    if (l.status == LocalStatus.unknown) await l.start(m);
+  }
+
+  List<Widget> _embeddedPanel(Settings s) {
+    final l = widget.chat.local;
+    if (l == null) return [Text('Moteur local indisponible dans cette version.', style: ui(11, color: Palette.redText))];
+    final model = widget.chat.effectiveModel;
+    final Color stColor = switch (l.status) {
+      LocalStatus.ready => Palette.green2,
+      LocalStatus.error => Palette.redText,
+      LocalStatus.needsRuntime || LocalStatus.needsModel => Palette.amber,
+      _ => Palette.dim,
+    };
+    final String line = switch (l.status) {
+      LocalStatus.needsRuntime => 'Un clic : Fractus télécharge le moteur (25 Mo) puis $model, et c\'est prêt.',
+      LocalStatus.needsModel => 'Moteur prêt — il manque le modèle $model.',
+      LocalStatus.unknown => l.busy ? l.statusLine : 'Tout est téléchargé : lancer $model.',
+      _ => l.statusLine,
+    };
+    final String action = switch (l.status) {
+      LocalStatus.needsRuntime || LocalStatus.needsModel => 'Télécharger $model',
+      LocalStatus.unknown => 'Lancer',
+      LocalStatus.error => 'Réessayer',
+      LocalStatus.ready => l.running == LocalEngineService.normalize(model) ? '' : 'Passer à $model',
+      _ => '',
+    };
+    return [
+      Row(
+        children: [
+          Container(width: 7, height: 7, decoration: BoxDecoration(color: stColor, shape: BoxShape.circle)),
+          const SizedBox(width: 6),
+          Expanded(child: Text(line, maxLines: 2, overflow: TextOverflow.ellipsis, style: ui(11.5, color: stColor))),
+          const SizedBox(width: 6),
+          if (action.isNotEmpty && !l.busy)
+            IslandButton(label: action, compact: true, primary: true, onTap: () => unawaited(l.ensure(model))),
+        ],
+      ),
+      if (l.busy || l.status == LocalStatus.starting) ...[
+        const SizedBox(height: 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: LinearProgressIndicator(
+            value: (l.status == LocalStatus.downloadingModel || l.status == LocalStatus.downloadingRuntime) && l.progress > 0 && l.progress < 1 ? l.progress : null,
+            minHeight: 4,
+            backgroundColor: Palette.tabOn,
+            color: Palette.accent,
+          ),
+        ),
+      ],
+      const SizedBox(height: 4),
+      Row(
+        children: [
+          Expanded(child: _field(_ollamaModel, hint: 'Modèle (nom de la bibliothèque Ollama, ex. ${Settings.defaultOllamaModel})')),
+          const SizedBox(width: 6),
+          _embeddedModelPicker(l),
+          const SizedBox(width: 6),
+          IslandButton(
+            label: _testing ? 'Test…' : 'Tester',
+            compact: true,
+            onTap: _testing ? () {} : _testEmbedded,
+          ),
+        ],
+      ),
+      if (_testResult != null) ...[
+        const SizedBox(height: 3),
+        Text(_testResult!, style: ui(11, color: _testOk ? Palette.dim : Palette.redText)),
+      ],
+    ];
+  }
+
+  Widget _embeddedModelPicker(LocalEngineService l) {
+    return FutureBuilder<List<String>>(
+      future: l.installedModels(),
+      builder: (context, snap) {
+        final models = snap.data ?? const <String>[];
+        return PopupMenuButton<String>(
+          tooltip: models.isEmpty ? 'Aucun modèle téléchargé' : 'Modèles téléchargés',
+          color: Palette.card,
+          padding: EdgeInsets.zero,
+          onSelected: (id) {
+            _ollamaModel.text = id;
+            _saveChat();
+            unawaited(l.ensure(id));
+            setState(() {});
+          },
+          itemBuilder: (_) => [
+            if (models.isEmpty)
+              PopupMenuItem(enabled: false, height: 30, child: Text('Aucun modèle téléchargé', style: ui(12, color: Palette.dim3))),
+            for (final m in models) PopupMenuItem(value: m, height: 30, child: Text(m, style: ui(12))),
+          ],
+          child: Container(
+            height: 26,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(color: Palette.tabOn, borderRadius: BorderRadius.circular(7), border: Border.all(color: Palette.hairline)),
+            child: const Icon(Icons.expand_more_rounded, size: 16, color: Palette.dim),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _testEmbedded() async {
+    _saveChat();
+    setState(() {
+      _testing = true;
+      _testResult = null;
+    });
+    try {
+      final sw = Stopwatch()..start();
+      final reply = await widget.chat.send([ChatMessage('user', 'Réponds juste « ok ».')]);
+      sw.stop();
+      final ok = !reply.startsWith('Impossible') && !reply.startsWith('Moteur local');
+      setState(() {
+        _testOk = ok;
+        _testResult = ok ? 'Ça répond en ${(sw.elapsedMilliseconds / 1000).toStringAsFixed(1)} s : « ${reply.length > 60 ? '${reply.substring(0, 60)}…' : reply} »' : reply;
+      });
+    } catch (e) {
+      setState(() {
+        _testOk = false;
+        _testResult = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
   }
 
   List<Widget> _ollamaPanel(Settings s) {

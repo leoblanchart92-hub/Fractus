@@ -4,6 +4,12 @@ Ce fichier est lu par l'application (PC et téléphone) pour la page « Nouveaut
 et sert de notes de version sur GitHub. Une section par version, la plus récente en haut :
 `## <version> · <date>`, puis des puces. Le gras, le code et les listes sont rendus.
 
+## 0.12.1 · 16 novembre 2026
+
+- **Rien à installer** : le moteur « Dans Fractus » fait tourner le modèle lui-même. Fractus télécharge un petit moteur (25 Mo) et le modèle (`lfm3:1.7b` par défaut, au nom de la bibliothèque Ollama) — au premier message, ou d'un clic dans Réglages → Chat. Pas d'Ollama, pas de clé.
+- Ollama reste proposé pour ceux qui l'ont déjà ; Groq pour le cloud.
+- Le téléchargement du modèle est vérifié (empreinte SHA-256) ; le moteur s'arrête avec Fractus.
+
 ## 0.12.0 · 16 novembre 2026
 
 - **Le cerveau de Fractus tourne sur ton PC** : plus besoin de clé Groq. Réglages → Chat → « Sur ce PC (Ollama) ». Fractus **installe Ollama** lui-même (bouton *Installer Ollama*), le lance, et **télécharge le modèle** (`lfm3:1.7b` par défaut, modifiable) avec une barre de progression.
