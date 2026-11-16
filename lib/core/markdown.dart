@@ -191,6 +191,12 @@ class Markdown {
           continue;
         }
       }
+      if ((c == '*' || c == '_') && s.startsWith(c + c, i)) {
+        // Un « ** » qui n'a pas trouvé sa fermeture : du texte tel quel.
+        buf.write(c + c);
+        i += 2;
+        continue;
+      }
       if ((c == '*' || c == '_') && !(c == '_' && wordChar(i - 1) && wordChar(i + 1))) {
         if (italic || (i + 1 < s.length && s[i + 1] != ' ' && s.indexOf(c, i + 1) > 0)) {
           flush();
